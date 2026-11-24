@@ -49,3 +49,8 @@ button.money{background:none;color:var(--ink);padding:2px 4px;min-height:0;text-
 .icon.happy{display:flex;flex-direction:column;align-items:center;line-height:1;padding:4px 6px}.icon.happy small{font-size:10px;color:var(--muted);font-weight:600;margin-top:1px}
 @media (max-width:420px){.top{gap:5px;padding:7px 8px}.top .icon{padding:5px 7px}}
 .top .city small{display:block;overflow:hidden;text-overflow:ellipsis}
+.tasksb{position:relative}.tasksb em{position:absolute;top:-4px;right:-4px;background:var(--red);color:#fff;font-style:normal;font-size:10px;border-radius:9px;padding:0 5px}
+.tasks{display:flex;flex-direction:column;gap:8px}.task{display:flex;gap:8px;align-items:center;background:#f6f8fb;border-radius:12px;padding:8px}.task.done{background:#eaf6e4}
+.task .ti{font-size:24px}.task .tt{flex:1;min-width:0}.task .tt small{color:var(--muted);font-size:12px}.task button{min-height:38px;padding:6px 12px}.task .link{background:none;color:var(--muted);font-size:18px}
+.wideb.traf{margin-top:6px;background:#e7eef8;color:#2b4f7d}.wideb.traf.on{background:#2b4f7d;color:#fff}
+.needsb{background:#eef3f8;color:var(--ink);margin:4px 0 6px}
