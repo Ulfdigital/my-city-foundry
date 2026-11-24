@@ -5,3 +5,4 @@
 - **Später als App:** wie Pferde-Farm/My Farm World – die iOS-App lädt das Spiel live von Vercel, Updates nur über GitHub → Vercel, kein neuer TestFlight-Upload. Käufe und Links nach außen hinter Elternsperre (Alter unter 18).
 - Spielstand-Schlüssel `my-city-foundry-v1` nicht ändern. Neue Felder in `restore()` ergänzen.
 - Plan: ROADMAP.md.
+- Bei jedem Update Version erhöhen: package.json, js/data.mjs (BUILD) und version.json gleich halten (Test prüft das). Dann lädt sich das Spiel in der App von selbst neu.
