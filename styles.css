@@ -54,3 +54,20 @@ button.money{background:none;color:var(--ink);padding:2px 4px;min-height:0;text-
 .task .ti{font-size:24px}.task .tt{flex:1;min-width:0}.task .tt small{color:var(--muted);font-size:12px}.task button{min-height:38px;padding:6px 12px}.task .link{background:none;color:var(--muted);font-size:18px}
 .wideb.traf{margin-top:6px;background:#e7eef8;color:#2b4f7d}.wideb.traf.on{background:#2b4f7d;color:#fff}
 .needsb{background:#eef3f8;color:var(--ink);margin:4px 0 6px}
+/* 0.6.0 – Karte über den ganzen Bildschirm: oben nur kleine Schilder, Gebäude-Auswahl seitlich */
+.top{left:max(8px,env(safe-area-inset-left));right:max(8px,env(safe-area-inset-right));background:none;box-shadow:none;padding:0;border-radius:0;align-items:flex-start;justify-content:space-between;pointer-events:none}
+.top>*{pointer-events:auto}
+.chip{background:rgba(255,255,255,.93);color:var(--ink);border-radius:14px;box-shadow:0 3px 12px rgba(0,0,0,.18);font-weight:400}
+.top .chip.money{display:flex;flex-direction:column;align-items:flex-start;text-align:left;padding:6px 12px;min-height:0;gap:1px}
+.top .chip.money b{font-size:17px;line-height:1.2}.top .chip.money small{font-size:12px;color:var(--green);font-weight:600}.top .chip.money small.neg{color:var(--red)}
+.top .chip .lv{font-size:11.5px;color:var(--muted);display:block;min-width:110px}.top .chip .lvbar{max-width:none}
+.top .corner{display:flex;gap:6px}
+.chip.round{min-height:44px;min-width:44px;padding:4px 8px;font-size:19px;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1}
+.chip.round small{font-size:10px;color:var(--muted);font-weight:600;margin-top:1px}
+.sub{left:auto;right:max(8px,env(safe-area-inset-right));top:auto;bottom:calc(86px + env(safe-area-inset-bottom));max-height:calc(100% - 160px - env(safe-area-inset-top) - env(safe-area-inset-bottom));width:104px;flex-direction:column;overflow-x:hidden;overflow-y:auto;border:0;border-radius:16px;padding:6px;box-shadow:0 4px 18px rgba(0,0,0,.2);-webkit-overflow-scrolling:touch}
+.sub button{min-width:0;width:100%;font-size:11.5px;white-space:normal;text-align:center;line-height:1.2;padding:6px 4px}
+.sub button small{white-space:normal}
+.panel{bottom:calc(92px + env(safe-area-inset-bottom))}
+body:has(.sub:not(.hidden)) .panel{right:122px}
+#toasts{top:calc(78px + env(safe-area-inset-top))}
+@media (max-width:420px){.sub{width:86px}.sub button{font-size:10.5px}body:has(.sub:not(.hidden)) .panel{right:100px}.top .chip .lv{min-width:90px}}

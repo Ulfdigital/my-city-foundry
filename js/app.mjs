@@ -30,15 +30,17 @@ function startCity(){document.body.className='citymode';
  $('#app').innerHTML=`<canvas id="map"></canvas><header class="top" id="top"></header><div id="panel" class="panel hidden"></div><div class="sub hidden" id="sub"></div><nav class="tools" id="tools"></nav>`;
  canvas=$('#map');ctx=canvas.getContext('2d');resize();cam.z=W<600?1.3:1.4;centerOn(cam,game.start.x,game.start.y+1,W,Hh);
  hud();toolbar();bindPointer();requestAnimationFrame(loop);}
-function resize(){dpr=Math.min(2,window.devicePixelRatio||1);W=window.innerWidth;Hh=window.innerHeight;if(!canvas)return;canvas.width=W*dpr;canvas.height=Hh*dpr;canvas.style.width=W+'px';canvas.style.height=Hh+'px';}
-window.addEventListener('resize',()=>{resize();});
+// Größe immer frisch messen: In der App ist das Fenster beim Start manchmal noch klein (dann war die Karte nur ein Streifen).
+function size(){const e=document.documentElement;return{w:Math.max(window.innerWidth||0,e.clientWidth||0),h:Math.max(window.innerHeight||0,e.clientHeight||0),d:Math.min(2,window.devicePixelRatio||1)};}
+function resize(){const s=size();dpr=s.d;W=s.w;Hh=s.h;if(!canvas)return;canvas.width=Math.round(W*dpr);canvas.height=Math.round(Hh*dpr);canvas.style.width=W+'px';canvas.style.height=Hh+'px';}
+window.addEventListener('resize',resize);window.addEventListener('orientationchange',()=>setTimeout(resize,200));window.visualViewport?.addEventListener('resize',resize);
 
-function hud(){const p=population(game),inc=incomePerMin(game),L=cityLevel(game),nx=nextLevelPop(game),from=levelPop(L),share=nx?Math.max(0,Math.min(1,(p-from)/(nx-from))):1,d=demand(game);
+function hud(){const p=population(game),inc=incomePerMin(game),L=cityLevel(game),nx=nextLevelPop(game),from=levelPop(L),share=nx?Math.max(0,Math.min(1,(p-from)/(nx-from))):1,d=demand(game),h=happiness(game),done=(game.tasks||[]).filter(t=>taskDone(game,t)).length;
  const dm=(icon,v,on)=>on?`<span class="dm" title="Nachfrage"><i>${icon}</i><u><b style="width:${Math.max(0,Math.min(100,v*2))}%"></b></u></span>`:'';
- $('#top').innerHTML=`<div class="city"><b>${esc(game.city.name)}</b><small>Level ${L} · ${citySize(p).name} · 👥 ${fmt(p)}${attractiveness(game)?` · ⭐ ${fmt(attractiveness(game))}`:''}</small><span class="lvbar"><i style="width:${share*100}%"></i></span>
-  <span class="dems">${dm('🏡',d.house,true)}${dm('🛒',d.shop,unlocked(game,'zonec'))}${dm('🏭',d.factory,unlocked(game,'zonei'))}</span></div>
-  <button class="money" data-finance><b>🪙 ${fmt(game.money)}</b><small class="${inc<0?'neg':''}">${inc>=0?'+':''}${fmt(inc)} / Min.</small></button><button class="icon happy" data-finance title="Zufriedenheit">${happyIcon(happiness(game))}<small>${happiness(game)}%</small></button>
-  <button class="icon tasksb" data-tasks title="Aufträge">📋${(game.tasks||[]).filter(t=>taskDone(game,t)).length?`<em>${(game.tasks||[]).filter(t=>taskDone(game,t)).length}</em>`:''}</button><button class="icon" data-settings aria-label="Einstellungen">⚙️</button>`;}
+ // Oben nur noch kleine Schilder in den Ecken – die Karte bekommt den ganzen Bildschirm
+ $('#top').innerHTML=`<button class="chip money" data-finance><b>🪙 ${fmt(game.money)}</b><small class="${inc<0?'neg':''}">${inc>=0?'+':''}${fmt(inc)} / Min.</small>
+   <span class="lv">Lv ${L} · 👥 ${fmt(p)}<span class="lvbar"><i style="width:${share*100}%"></i></span></span><span class="dems">${dm('🏡',d.house,true)}${dm('🛒',d.shop,unlocked(game,'zonec'))}${dm('🏭',d.factory,unlocked(game,'zonei'))}</span></button>
+  <span class="corner"><button class="chip round happy" data-finance title="Zufriedenheit">${happyIcon(h)}<small>${h}%</small></button><button class="chip round tasksb" data-tasks title="Aufträge">📋${done?`<em>${done}</em>`:''}</button><button class="chip round" data-settings aria-label="Einstellungen">⚙️</button></span>`;}
 function toolbar(){const lv=cityLevel(game);
  $('#tools').innerHTML=GROUPS.map(G=>{const ts=TOOLS.filter(t=>t.group===G.id),open=ts.some(t=>unlocked(game,t.id)),fresh=ts.filter(t=>unlocked(game,t.id)&&!built(game,t.id)&&t.lvl>1&&t.lvl>=lv-1).length;
   return`<button class="${group===G.id?'on':''} ${open?'':'locked'}" data-group="${G.id}"><span>${open?G.icon:'🔒'}</span>${G.short||G.name}${fresh?'<em>neu</em>':''}</button>`;}).join('');
@@ -46,7 +48,7 @@ function toolbar(){const lv=cityLevel(game);
  if(ts.length>1){sub.innerHTML=ts.map(t=>{const o=unlocked(game,t.id),done=t.once&&built(game,t.id);return`<button class="${cur===t.id?'on':''} ${o&&!done?'':'locked'}" data-tool="${t.id}"><span>${o?t.icon:'🔒'}</span>${t.name}<small>${!o?'ab Level '+t.lvl:done?'gebaut':t.id==='lanes'?'mehr Spuren':t.id==='land'?fmt(sectorPrice(game)):fmt(t.cost)+(t.size>1?` · ${t.size}×${t.size}`:'')}</small></button>`;}).join('');sub.classList.remove('hidden');}
  else sub.classList.add('hidden');}
 
-function loop(t){if(!game||!canvas)return;draw(ctx,game,cam,{w:W,h:Hh,dpr,sel,preview,t,showNeeds,money:game.money,dirt:showDirt||['zone','zonei','power','airport'].includes(cur),traffic:showTraffic||cur==='lanes',land:cur==='land'});requestAnimationFrame(loop);}
+function loop(t){if(!game||!canvas)return;{const s=size();if(s.w!==W||s.h!==Hh||s.d!==dpr)resize();}draw(ctx,game,cam,{w:W,h:Hh,dpr,sel,preview,t,showNeeds,money:game.money,dirt:showDirt||['zone','zonei','power','airport'].includes(cur),traffic:showTraffic||cur==='lanes',land:cur==='land'});requestAnimationFrame(loop);}
 setInterval(()=>{if(!game||!canvas)return;const before=population(game),bj=jobs(game);game=update(game,Date.now());const p=population(game);
  if(p>before)toast('Neue Einwohner sind eingezogen! 🏡');else if(jobs(game)>bj)toast('Neue Arbeitsplätze in der Stadt! 💼');hud();levelUps();eventsModal();if(sel&&!$('#panel').dataset.modal)panel();},1000);
 setInterval(()=>{if(game)save();},5000);
