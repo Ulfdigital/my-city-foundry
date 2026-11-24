@@ -37,3 +37,8 @@ input{font:inherit;font-size:17px;border:2px solid var(--line);border-radius:12p
 .tools button.locked{opacity:.55}
 .lvup{text-align:center}.lvup .big-emo{font-size:52px}.lvup .needs{text-align:left;background:#f3f7fb;border-radius:12px;padding:8px 12px}
 .small{font-size:13px}
+.sub{position:fixed;left:0;right:0;bottom:calc(78px + env(safe-area-inset-bottom));z-index:5;display:flex;gap:6px;overflow-x:auto;padding:8px;background:rgba(241,245,249,.96);border-top:1px solid var(--line);scrollbar-width:none}
+.sub.hidden{display:none}.sub button{flex:0 0 auto;background:#fff;color:var(--ink);display:flex;flex-direction:column;align-items:center;font-size:12px;padding:6px 10px;min-height:58px;border:2px solid transparent;font-weight:600;min-width:74px}
+.sub button span{font-size:20px;line-height:24px}.sub button small{color:var(--muted);font-weight:500;font-size:10.5px;white-space:nowrap}.sub button.on{border-color:var(--blue);background:#e3eefb}.sub button.locked{opacity:.5}
+.tools button{position:relative}.tools button em{position:absolute;top:2px;right:2px;background:var(--red);color:#fff;font-style:normal;font-size:8.5px;border-radius:6px;padding:0 3px}
+.panel{bottom:calc(160px + env(safe-area-inset-bottom))}

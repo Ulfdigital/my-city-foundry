@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {newGame,act,update,restore,tile,population,incomePerMin,missing,canUpgrade,hasRoad,demand,cityLevel,jobs,unlocked} from '../js/engine.mjs';
-import {START_MONEY,SAVE_KEY,MAP_W,MAP_H,tool,LEVELS,MOVE_IN_SEC,CITY_LEVELS,LEVEL_BONUS,BUILD,BIZ} from '../js/data.mjs';
+import {newGame,act,update,restore,tile,population,incomePerMin,missing,canUpgrade,hasRoad,demand,cityLevel,jobs,unlocked,attractiveness,tourism,covered,built} from '../js/engine.mjs';
+import {START_MONEY,SAVE_KEY,MAP_W,MAP_H,tool,TOOLS,LEVELS,MOVE_IN_SEC,levelPop,LEVEL_BONUS,BUILD,BIZ,MAX_CITY_LEVEL,OLD_MAP} from '../js/data.mjs';
 import {readFileSync} from 'node:fs';
 const T0=new Date('2026-11-24T10:00:00').getTime(),MIN=6e4;
 const ok=(g,a,t=T0)=>{const r=act(g,a,t);assert.equal(r.error,null,JSON.stringify(a)+' → '+r.error);return r.game;};
@@ -25,37 +25,62 @@ test('Wohngebiet an der Straße: Leute ziehen ein, ohne Straße nicht',()=>{
  g=ok(g,{type:'build',tool:'zone',x:far.x,y:far.y},T0+MOVE_IN_SEC[1]*1000+2);g=update(g,T0+10*MIN);assert.equal(tile(g,far.x,far.y).t,'zone');});
 
 const lvl=(g,l)=>{g.level=l;return g;};
-test('Level: Gebäude erst nach und nach, Aufstieg mit Einwohnern und Belohnung',()=>{
- let g=newGame(T0);assert.equal(cityLevel(g),1);const p=free(g);
- assert.ok(unlocked(g,'road')&&unlocked(g,'zone')&&unlocked(g,'park'));assert.ok(!unlocked(g,'power')&&!unlocked(g,'zonei'));
+const fill=(g,n,o)=>{for(let i=0;i<g.tiles.length&&population(g)<n;i++)if(g.tiles[i].t==='grass'){g.tiles[i]={...o};g.rev++;}};
+test('50 Level: Gebäude nach und nach, Aufstieg mit Einwohnern und Belohnung',()=>{
+ let g=newGame(T0);assert.equal(cityLevel(g),1);assert.equal(MAX_CITY_LEVEL,50);const p=free(g);
+ for(let l=2;l<=50;l++)assert.ok(levelPop(l)>levelPop(l-1));assert.ok(levelPop(50)>50000);
+ assert.ok(unlocked(g,'road')&&unlocked(g,'zone')&&unlocked(g,'park'));assert.ok(!unlocked(g,'power')&&!unlocked(g,'airport'));
  assert.match(bad(g,{type:'build',tool:'power',x:p.x,y:p.y}),/Stadt-Level 2/);
- const m=g.money;for(let i=0;i<g.tiles.length&&population(g)<CITY_LEVELS[3].pop;i++)if(g.tiles[i].t==='grass')g.tiles[i]={t:'house',lvl:2};
- g=update(g,T0+1000);assert.equal(cityLevel(g),3);assert.ok(g.money>=m+LEVEL_BONUS(2)+LEVEL_BONUS(3));assert.deepEqual(g.levelUps.map(l=>l.level),[2,3]);
- assert.ok(g.levelUps[1].tools.includes('zonei'));g=ok(g,{type:'seenLevelUps'});assert.equal(g.levelUps.length,0);});
+ const m=g.money;fill(g,levelPop(3),{t:'house',lvl:2});g=update(g,T0+1000);assert.equal(cityLevel(g),3);
+ assert.ok(g.money>=m+LEVEL_BONUS(2)+LEVEL_BONUS(3));assert.deepEqual(g.levelUps.map(l=>l.level),[2,3]);
+ assert.ok(g.levelUps[1].tools.includes('zonei'));g=ok(g,{type:'seenLevelUps'});assert.equal(g.levelUps.length,0);
+ assert.equal(tool('airport').lvl,40);assert.equal(tool('space').lvl,50);
+ const lv=new Set(TOOLS.map(t=>t.lvl));assert.ok(lv.size>=25,'viele Level schalten etwas frei');});
+
+test('Große Gebäude: Flughafen 3×3, nur einmal, Abriss entfernt alles, Hafen nur am Wasser',()=>{
+ let g=lvl(newGame(T0),50);g.money=1e7;let spot=null;
+ for(let y=0;y<MAP_H-3&&!spot;y++)for(let x=0;x<MAP_W-3;x++){let ok2=true;for(let j=y;j<y+3;j++)for(let i=x;i<x+3;i++)if(tile(g,i,j).t!=='grass')ok2=false;if(ok2){spot={x,y};break;}}
+ g=ok(g,{type:'build',tool:'airport',...spot});for(let j=0;j<3;j++)for(let i=0;i<3;i++)assert.equal(tile(g,spot.x+i,spot.y+j).t,'airport');
+ assert.equal(built(g,'airport'),1);assert.ok(jobs(g)>=2000);assert.ok(tourism(g)>=600);assert.ok(attractiveness(g)>=35);
+ assert.match(bad(g,{type:'build',tool:'airport',x:spot.x,y:spot.y+5}),/nur einmal|frei|Wasser|Karte/);
+ g=ok(g,{type:'build',tool:'bulldoze',x:spot.x+2,y:spot.y+1});for(let j=0;j<3;j++)for(let i=0;i<3;i++)assert.equal(tile(g,spot.x+i,spot.y+j).t,'grass');
+ let dry=null;for(let y=1;y<MAP_H-3&&!dry;y++)for(let x=1;x<MAP_W-3;x++){let ok2=true;for(let j=y-1;j<y+3;j++)for(let i=x-1;i<x+3;i++)if(tile(g,i,j).t!=='grass')ok2=false;if(ok2){dry={x,y};break;}}
+ assert.match(bad(g,{type:'build',tool:'harbor',...dry}),/am Wasser/);});
+
+test('Dienste versorgen den Umkreis; Attraktivität lockt Leute und Touristen',()=>{
+ let g=lvl(newGame(T0),9);g.money=1e6;const s=g.start;assert.ok(!covered(g,s.x,s.y+1,'school'));
+ g=ok(g,{type:'build',tool:'school',x:s.x+1,y:s.y+2});assert.ok(covered(g,s.x,s.y+1,'school'));
+ const d0=demand(g).house;g=ok(g,{type:'build',tool:'cityhall',x:s.x-4,y:s.y+2});assert.ok(demand(g).house>d0);assert.match(bad(g,{type:'build',tool:'cityhall',x:s.x-4,y:s.y+5}),/nur einmal/);});
+
+test('Alte Stadt (40×40) zieht auf die große Karte um – nichts geht verloren',()=>{
+ const g=newGame(T0);const old={...g,tiles:Array.from({length:OLD_MAP*OLD_MAP},()=>({t:'grass'})),start:{x:17,y:17}};
+ old.tiles[17*OLD_MAP+17]={t:'road'};old.tiles[18*OLD_MAP+17]={t:'house',lvl:4};const r=restore(JSON.stringify(old));
+ assert.equal(r.tiles.length,MAP_W*MAP_H);const off=(MAP_W-OLD_MAP)/2;assert.deepEqual(r.start,{x:17+off,y:17+off});assert.equal(tile(r,17+off,18+off).lvl,4);});
 
 test('Läden und Fabriken: entstehen bei Nachfrage, Fabriken brauchen Strom, bringen Arbeitsplätze und Steuern',()=>{
  let g=lvl(newGame(T0),3);g.money=1e5;const s=g.start;
  g=ok(g,{type:'build',tool:'zonec',x:s.x+2,y:s.y+1});g=ok(g,{type:'build',tool:'zonei',x:s.x+3,y:s.y+1});
  g=update(g,T0+MOVE_IN_SEC[1]*1000+1);assert.equal(tile(g,s.x+2,s.y+1).t,'shop');assert.equal(tile(g,s.x+3,s.y+1).t,'zonei');
  g=ok(g,{type:'build',tool:'power',x:s.x+3,y:s.y+3},T0+MOVE_IN_SEC[1]*1000+2);g=update(g,T0+2*MOVE_IN_SEC[1]*1000+10);g=update(g,T0+3*MOVE_IN_SEC[1]*1000+20);
- assert.equal(tile(g,s.x+3,s.y+1).t,'factory');assert.equal(jobs(g),BIZ.shop.jobs[1]+BIZ.factory.jobs[1]);
+ assert.equal(tile(g,s.x+3,s.y+1).t,'factory');assert.equal(jobs(g,'shop')+jobs(g,'factory'),BIZ.shop.jobs[1]+BIZ.factory.jobs[1]);
  assert.ok(incomePerMin(g)>population(g)-10);
  g=ok(g,{type:'upgrade',x:s.x+2,y:s.y+1},T0+4*MOVE_IN_SEC[1]*1000);assert.equal(tile(g,s.x+2,s.y+1).lvl,2);});
 
 test('Nachfrage: ohne Arbeitsplätze ziehen irgendwann keine Leute mehr zu',()=>{
- let g=newGame(T0);for(let i=0;i<g.tiles.length&&population(g)<100;i++)if(g.tiles[i].t==='grass')g.tiles[i]={t:'house',lvl:2};
+ let g=newGame(T0);fill(g,120,{t:'house',lvl:2});
  assert.ok(demand(g).house<=0);assert.ok(demand(g).shop>0);assert.ok(demand(g).factory>0);});
 
-test('Ausbauen bis zum Wolkenkratzer: Strom, Wasser, Arbeit, Laden, Park, Stadt-Level',()=>{
- let g=lvl(newGame(T0),3);g.money=1e6;const s=g.start,h={x:s.x,y:s.y+1};
+test('Ausbauen bis zum Wolkenkratzer: Versorgung, Dienste, Stadt-Level',()=>{
+ let g=lvl(newGame(T0),3);g.money=1e7;const s=g.start,h={x:s.x,y:s.y+1};
  g=ok(g,{type:'upgrade',...h});assert.equal(tile(g,h.x,h.y).lvl,2);assert.match(bad(g,{type:'upgrade',...h}),/Strom/);assert.ok(!canUpgrade(g,h.x,h.y));
  g=ok(g,{type:'build',tool:'power',x:s.x+2,y:s.y+2});g=ok(g,{type:'upgrade',...h});assert.equal(tile(g,h.x,h.y).lvl,3);
- assert.deepEqual(missing(g,h.x,h.y,4),['water','shop']);g=ok(g,{type:'build',tool:'tower',x:s.x+3,y:s.y+2});
- g.tiles[(s.y+1)*MAP_W+s.x+1]={t:'shop',lvl:1};g=ok(g,{type:'upgrade',...h});
- assert.match(bad(g,{type:'upgrade',...h}),/Park/);g=ok(g,{type:'build',tool:'park',x:s.x-1,y:s.y+1});assert.match(bad(g,{type:'upgrade',...h}),/Stadt-Level 5/);
- g.level=5;g.tiles[(s.y+2)*MAP_W+s.x+5]={t:'factory',lvl:3};g.tiles[(s.y+2)*MAP_W+s.x+6]={t:'factory',lvl:3};
- g=ok(g,{type:'upgrade',...h});assert.equal(tile(g,h.x,h.y).lvl,5);assert.match(bad(g,{type:'upgrade',...h}),/Stadt-Level 7/);
- g.level=7;g.tiles[(s.y+3)*MAP_W+s.x+5]={t:'factory',lvl:3};g.tiles[(s.y+3)*MAP_W+s.x+6]={t:'factory',lvl:3};g=ok(g,{type:'upgrade',...h});assert.equal(tile(g,h.x,h.y).lvl,6);assert.match(bad(g,{type:'upgrade',...h}),/Höher/);});
+ g=ok(g,{type:'build',tool:'tower',x:s.x+3,y:s.y+2});g.tiles[(s.y+1)*MAP_W+s.x+1]={t:'shop',lvl:1};g.rev++;
+ assert.deepEqual(missing(g,h.x,h.y,4),['school']);g.level=9;g=ok(g,{type:'build',tool:'school',x:s.x+4,y:s.y+2});g=ok(g,{type:'upgrade',...h});assert.equal(tile(g,h.x,h.y).lvl,4);
+ g=ok(g,{type:'build',tool:'park',x:s.x-1,y:s.y+1});g=ok(g,{type:'build',tool:'fire',x:s.x+5,y:s.y+2});g=ok(g,{type:'build',tool:'police',x:s.x+6,y:s.y+2});
+ for(const[dx,dy]of[[5,3],[6,3],[5,4],[6,4]]){g.tiles[(s.y+dy)*MAP_W+s.x+dx]={t:'factory',lvl:4};}g.rev++;
+ assert.match(bad(g,{type:'upgrade',...h}),/Stadt-Level 11/);g.level=11;g=ok(g,{type:'upgrade',...h});assert.equal(tile(g,h.x,h.y).lvl,5);
+ g.level=20;assert.match(bad(g,{type:'upgrade',...h}),/Krankenhaus/);g=ok(g,{type:'build',tool:'hospital',x:s.x+2,y:s.y+4});
+ g=ok(g,{type:'upgrade',...h});assert.equal(tile(g,h.x,h.y).lvl,6);assert.match(bad(g,{type:'upgrade',...h}),/Höher/);});
 
 test('Version ist überall gleich (für die Update-Prüfung in der App)',()=>{
  assert.equal(JSON.parse(readFileSync(new URL('../package.json',import.meta.url))).version,BUILD);
