@@ -6,3 +6,4 @@
 - Spielstand-Schlüssel `my-city-foundry-v1` nicht ändern. Neue Felder in `restore()` ergänzen.
 - Plan: ROADMAP.md.
 - Bei jedem Update Version erhöhen: package.json, js/data.mjs (BUILD) und version.json gleich halten (Test prüft das). Dann lädt sich das Spiel in der App von selbst neu.
+- iOS-App (ios/): lädt https://my-city-foundry.vercel.app live, Offline-Fassung über scripts/prepare-ios.sh, Bundle-ID com.ulfdigital.mycityfoundry. Noch keine Käufe (Ulf will erst testen). Nur Swift-Änderungen brauchen einen neuen TestFlight-Upload; das Ulf immer vorher sagen.

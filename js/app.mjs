@@ -4,6 +4,9 @@ import {newGame,act,update,restore,tile,population,incomePerMin,missing,has,hasR
 import {draw,screenToCell,centerOn,cellTop,TW,TH} from './render.mjs';
 
 const $=s=>document.querySelector(s);
+// In der iPhone-App: Links nach außen (Impressum) über die App im Browser öffnen
+const bridge=window.webkit?.messageHandlers?.cfApp;
+document.addEventListener('click',e=>{const a=e.target.closest('a[target="_blank"]');if(a&&bridge){e.preventDefault();try{bridge.postMessage({action:'open',url:a.href});}catch{}}},true);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=n=>Math.floor(n).toLocaleString('de-DE');
 let game=null,cam={x:0,y:0,z:1},cur='hand',group='hand',showDirt=false,showTraffic=false,sel=null,preview=null,showNeeds=true,canvas,ctx,W=0,Hh=0,dpr=1;

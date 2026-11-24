@@ -1,0 +1,102 @@
+# Baut das Offline-Spiel, legt es ins Xcode-Projekt und prüft, ob die App auf macOS/Xcode fehlerfrei kompiliert.
+# Ergebnis: „CityFoundry-Xcode-Projekt.zip“ zum Herunterladen – und, sobald die App-Store-Connect-Zugangsdaten als Secrets hinterlegt sind,
+# automatisch signiert und als neuer Build zu TestFlight hochgeladen (ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8, APPLE_TEAM_ID; optional IOS_BUNDLE_ID).
+name: iOS-Paket
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['index.html', 'styles.css', 'icon.svg', 'datenschutz.html', 'js/**', 'ios/**', 'package.json', 'scripts/**', '.github/workflows/ios-paket.yml']
+permissions:
+  contents: write
+concurrency: { group: ios-paket, cancel-in-progress: false }
+jobs:
+  paket:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm test
+      - run: sh scripts/prepare-ios.sh
+      - name: Versionsnummer setzen (TestFlight braucht bei jedem Upload eine höhere Build-Nummer)
+        run: |
+          V=$(node -p "require('./package.json').version")
+          B=$((1 + ${{ github.run_number }}))
+          sed -i '' -E "s/MARKETING_VERSION = [^;]+;/MARKETING_VERSION = $V;/g; s/CURRENT_PROJECT_VERSION = [^;]+;/CURRENT_PROJECT_VERSION = $B;/g" ios/CityFoundry.xcodeproj/project.pbxproj
+          echo "::notice title=App-Version::Version $V (Build $B)"
+      - name: Xcode-Version
+        run: xcodebuild -version
+      - name: App für den iPhone-Simulator bauen (ohne Signatur, nur Prüfung)
+        run: |
+          set +e
+          xcodebuild -project ios/CityFoundry.xcodeproj -scheme CityFoundry -configuration Release \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build > xcode.log 2>&1
+          rc=$?
+          set -e
+          tail -60 xcode.log
+          grep -hE "error:|warning:" xcode.log | sed -E 's#^/Users/runner/work/[^ ]*/ios/##' | sort -u | head -40 | while read -r w; do
+            case "$w" in *error:*) echo "::error title=Xcode-Fehler::$w";; *) echo "::warning title=Xcode-Hinweis::$w";; esac; done
+          if [ $rc -ne 0 ]; then grep -hB2 -A8 -E "\*\* BUILD FAILED|The following build commands failed" xcode.log | head -40 | while read -r w; do echo "::error title=Xcode-Abbruch::$w"; done; exit $rc; fi
+          echo "::notice title=Xcode::BUILD SUCCEEDED mit $(xcodebuild -version | head -1)"
+      - name: Update ins Xcode-Projekt übernehmen (Spieldateien + Versionsnummer, für Xcode Cloud/TestFlight)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git config user.name "github-actions" && git config user.email "github-actions@users.noreply.github.com"
+          git add -A ios/CityFoundry/WebAssets ios/CityFoundry.xcodeproj/project.pbxproj
+          if git diff --cached --quiet; then echo "Xcode-Projekt ist schon aktuell."; exit 0; fi
+          git commit -qm "iOS: Spiel $(node -p "require('./package.json').version") ins Xcode-Projekt übernommen [skip ci]"
+          for n in 1 2 3; do git pull -q --rebase origin main && git push -q origin HEAD:main && break; sleep 5; done
+          echo "::notice title=Xcode-Projekt::Update ins Xcode-Projekt (Zweig main) übernommen"
+      - name: Paket packen
+        run: |
+          mkdir -p paket/CityFoundry-iOS
+          cp -R ios/CityFoundry.xcodeproj ios/CityFoundry ios/TESTFLIGHT-DE.md paket/CityFoundry-iOS/
+          cd paket && zip -qr ../CityFoundry-Xcode-Projekt.zip CityFoundry-iOS
+          cd .. && echo "::notice title=Paket::CityFoundry-Xcode-Projekt.zip $(du -h CityFoundry-Xcode-Projekt.zip | cut -f1), Spieldateien: $(find ios/CityFoundry/WebAssets -type f | wc -l)"
+      - uses: actions/upload-artifact@v4
+        continue-on-error: true   # GitHub-Speicher voll? Egal – das Paket liegt auch im Zweig „ios-paket“.
+        with:
+          name: CityFoundry-Xcode-Projekt
+          path: CityFoundry-Xcode-Projekt.zip
+          retention-days: 30
+      - name: Paket im Zweig „ios-paket“ ablegen (zum einfachen Herunterladen)
+        run: |
+          mkdir ablage && cp CityFoundry-Xcode-Projekt.zip ablage/ && cd ablage
+          git init -q -b ios-paket && git config user.name "github-actions" && git config user.email "github-actions@users.noreply.github.com"
+          git add CityFoundry-Xcode-Projekt.zip && git commit -qm "iOS-Paket aus ${GITHUB_SHA::7}"
+          git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" ios-paket
+      - name: Automatisch zu TestFlight hochladen
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          IOS_BUNDLE_ID: ${{ secrets.IOS_BUNDLE_ID }}
+        run: |
+          if [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ] || [ -z "$ASC_KEY_P8" ] || [ -z "$APPLE_TEAM_ID" ]; then
+            echo "::warning title=TestFlight::Kein automatischer Upload – Zugangsdaten fehlen (Secrets ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8, APPLE_TEAM_ID). Anleitung: ios/TESTFLIGHT-DE.md"; exit 0; fi
+          KEY="$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"; printf '%s\n' "$ASC_KEY_P8" > "$KEY"
+          BID="${IOS_BUNDLE_ID:-com.ulfdigital.mycityfoundry}"
+          AUTH=(-allowProvisioningUpdates -authenticationKeyPath "$KEY" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID")
+          set +e
+          xcodebuild -project ios/CityFoundry.xcodeproj -scheme CityFoundry -configuration Release -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/CityFoundry.xcarchive" "${AUTH[@]}" DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic PRODUCT_BUNDLE_IDENTIFIER="$BID" archive > archive.log 2>&1
+          rc=$?; set -e; tail -40 archive.log
+          if [ $rc -ne 0 ]; then grep -hE "error:|No profiles|signing|Signing" archive.log | sort -u | head -20 | while read -r w; do echo "::error title=Archivieren/Signieren::$w"; done; exit $rc; fi
+          cat > "$RUNNER_TEMP/export.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+          <key>method</key><string>app-store-connect</string><key>destination</key><string>upload</string>
+          <key>teamID</key><string>$APPLE_TEAM_ID</string><key>signingStyle</key><string>automatic</string>
+          <key>uploadSymbols</key><true/><key>manageAppVersionAndBuildNumber</key><false/>
+          </dict></plist>
+          PLIST
+          set +e
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/CityFoundry.xcarchive" -exportOptionsPlist "$RUNNER_TEMP/export.plist" -exportPath "$RUNNER_TEMP/export" "${AUTH[@]}" > upload.log 2>&1
+          rc=$?; set -e; tail -40 upload.log; rm -f "$KEY"
+          if [ $rc -ne 0 ]; then grep -hiE "error|already|invalid" upload.log | sort -u | head -20 | while read -r w; do echo "::error title=TestFlight-Upload::$w"; done; exit $rc; fi
+          echo "::notice title=TestFlight::Neuer Build hochgeladen – erscheint nach 10–30 Minuten in TestFlight."

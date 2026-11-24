@@ -184,12 +184,12 @@ function bubble(ctx,cx,cy,text,bg){ctx.fillStyle=bg;ctx.strokeStyle='rgba(0,0,0,
  ctx.font='11px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#222';ctx.fillText(text,cx,cy+0.5);ctx.textBaseline='alphabetic';}
 const HEIGHT={house:[0,30,38,40,60,104,170,270],shop:[0,22,30,46,70,120,200],factory:[0,24,48,74,64,52]};
 
-export function draw(ctx,g,cam,{w,h,dpr,sel,preview,t,showNeeds,money,dirt,traffic,land}){const V=info(g);
- ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='#5f9d4b';ctx.fillRect(0,0,w,h);
+export function draw(ctx,g,cam,{w,h,dpr,sel,preview,t,showNeeds,money,dirt,traffic,land,bg=true,area}){const V=info(g);
+ ctx.setTransform(dpr,0,0,dpr,0,0);if(bg){ctx.fillStyle='#5f9d4b';ctx.fillRect(0,0,w,h);}
  ctx.setTransform(dpr*cam.z,0,0,dpr*cam.z,dpr*cam.x,dpr*cam.y);
  const pad=200;
  for(let d=0;d<MAP_W+MAP_H-1;d++)for(let x=Math.max(0,d-MAP_H+1);x<=Math.min(d,MAP_W-1);x++){const y=d-x,p=cellTop(x,y),cx=p.x,cy=p.y+TH/2;
-  const sx=cx*cam.z+cam.x,sy=cy*cam.z+cam.y;if(sx<-pad||sx>w+pad||sy<-pad||sy>h+pad*2)continue;
+  const sx=cx*cam.z+cam.x,sy=cy*cam.z+cam.y;if(sx<-pad||sx>w+pad||sy<-pad||sy>h+pad*2)continue;if(area&&(x<area[0]||y<area[1]||x>area[2]||y>area[3]))continue;
   const c=g.tiles[y*MAP_W+x],mine=owns(g,x,y);ground(ctx,c,x,y,cx,cy,t);
   if(c.t==='road'){const j=V.jam[y*MAP_W+x];if(traffic){ctx.fillStyle=j>1?'rgba(220,40,30,.55)':j>0.7?'rgba(240,170,30,.5)':'rgba(60,170,60,.35)';diamond(ctx,cx,cy,TW/2,TH/2);ctx.fill();}
    roadMarks(ctx,g,x,y,cx,cy,c,t,cam.z>0.55?Math.min(1.5,j):0);}
