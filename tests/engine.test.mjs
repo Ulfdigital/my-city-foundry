@@ -73,7 +73,7 @@ test('Nachfrage: ohne Arbeitsplätze ziehen irgendwann keine Leute mehr zu',()=>
 test('Ausbauen bis zum Wolkenkratzer: Versorgung, Dienste, Stadt-Level',()=>{
  let g=lvl(newGame(T0),3);g.money=1e7;const s=g.start,h={x:s.x,y:s.y+1};
  g=ok(g,{type:'upgrade',...h});assert.equal(tile(g,h.x,h.y).lvl,2);assert.match(bad(g,{type:'upgrade',...h}),/Strom/);assert.ok(!canUpgrade(g,h.x,h.y));
- g=ok(g,{type:'build',tool:'power',x:s.x+2,y:s.y+2});g=ok(g,{type:'upgrade',...h});assert.equal(tile(g,h.x,h.y).lvl,3);
+ g=ok(g,{type:'build',tool:'power',x:s.x+7,y:s.y+2});g=ok(g,{type:'upgrade',...h});assert.equal(tile(g,h.x,h.y).lvl,3);
  g=ok(g,{type:'build',tool:'tower',x:s.x+3,y:s.y+2});g.tiles[(s.y+1)*MAP_W+s.x+1]={t:'shop',lvl:1};g.rev++;
  assert.deepEqual(missing(g,h.x,h.y,4),['school']);g.level=9;g=ok(g,{type:'build',tool:'school',x:s.x+4,y:s.y+2});g=ok(g,{type:'upgrade',...h});assert.equal(tile(g,h.x,h.y).lvl,4);
  g=ok(g,{type:'build',tool:'park',x:s.x-1,y:s.y+1});g=ok(g,{type:'build',tool:'fire',x:s.x+5,y:s.y+2});g=ok(g,{type:'build',tool:'police',x:s.x+6,y:s.y+2});
@@ -91,3 +91,20 @@ test('Stadtkasse: Steuern pro Minute minus Unterhalt, offline höchstens 8 Stund
  g=update(g,T0+100*60*MIN);assert.ok(g.money-m<=inc*8*60+inc*10+1);});
 
 test('Spielstand speichern und laden',()=>{const g=newGame(T0);assert.deepEqual(restore(JSON.stringify(g)),g);assert.equal(restore('x'),null);assert.equal(restore('{"version":9}'),null);});
+
+import {taxRate,finances,happiness,mood} from '../js/engine.mjs';
+import {TAX_DEFAULT,HAPPY_MIN} from '../js/data.mjs';
+test('Steuern: höherer Satz bringt mehr Geld, macht aber unzufrieden; Grenzen 0–20 %',()=>{
+ let g=newGame(T0);fill(g,300,{t:'house',lvl:2});assert.equal(taxRate(g),TAX_DEFAULT);const f0=finances(g).people,h0=happiness(g);
+ g=ok(g,{type:'setTax',tax:15});assert.ok(finances(g).people>f0);assert.ok(happiness(g)<h0);
+ g=ok(g,{type:'setTax',tax:4});assert.ok(finances(g).people<f0);assert.ok(happiness(g)>h0);
+ assert.match(bad(g,{type:'setTax',tax:25}),/zwischen/);const h=happiness(g);assert.ok(h>=0&&h<=100);assert.ok(mood(g).length>=3);
+ const old=newGame(T0);delete old.tax;assert.equal(restore(JSON.stringify(old)).tax,TAX_DEFAULT);});
+
+test('Umwelt: neben Fabriken wachsen keine großen Häuser; Dreck macht unzufrieden',()=>{
+ let g=lvl(newGame(T0),9);g.money=1e7;const s=g.start,h={x:s.x,y:s.y+1};
+ g=ok(g,{type:'build',tool:'power',x:s.x+8,y:s.y+2});g=ok(g,{type:'build',tool:'tower',x:s.x+3,y:s.y+3});g=ok(g,{type:'build',tool:'school',x:s.x+4,y:s.y+3});
+ g.tiles[(s.y+1)*MAP_W+s.x+1]={t:'shop',lvl:1};g.tiles[(s.y+1)*MAP_W+s.x-1]={t:'factory',lvl:3};g.tiles[h.y*MAP_W+h.x].lvl=3;g.rev++;
+ assert.ok(missing(g,h.x,h.y,4).includes('clean'));const hp=happiness(g);
+ g.tiles[(s.y+1)*MAP_W+s.x-1]={t:'grass'};g.rev++;assert.ok(!missing(g,h.x,h.y,4).includes('clean'));assert.ok(happiness(g)>=hp);
+ g.tax=20;g.rev++;if(happiness(g)<HAPPY_MIN)assert.ok(missing(g,h.x,h.y,4).includes('happy'));});

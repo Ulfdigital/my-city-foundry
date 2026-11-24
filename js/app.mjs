@@ -1,12 +1,12 @@
 // My City Foundry – Oberfläche: Karte zum Verschieben/Zoomen, Werkzeugleiste, Infofenster. Speichert automatisch auf dem Gerät.
-import {SAVE_KEY,TOOLS,GROUPS,tool,LEVELS,MAX_LEVEL,NEEDS,TREE_CLEAR,citySize,MAP_W,MAP_H,BIZ,bizMax,BUILD,levelPop,MAX_CITY_LEVEL} from './data.mjs';
-import {newGame,act,update,restore,tile,population,incomePerMin,missing,has,hasRoad,counts,cityLevel,nextLevelPop,unlocked,demand,jobs,maxLevel,upgradeCost,attractiveness,tourism,built,canPlace} from './engine.mjs';
+import {SAVE_KEY,TOOLS,GROUPS,tool,LEVELS,MAX_LEVEL,NEEDS,TREE_CLEAR,citySize,MAP_W,MAP_H,BIZ,bizMax,BUILD,levelPop,MAX_CITY_LEVEL,TAX_MIN,TAX_MAX,TAX_DEFAULT,happyText,happyIcon,HAPPY_MIN} from './data.mjs';
+import {newGame,act,update,restore,tile,population,incomePerMin,missing,has,hasRoad,counts,cityLevel,nextLevelPop,unlocked,demand,jobs,maxLevel,upgradeCost,attractiveness,tourism,built,canPlace,happiness,mood,finances,taxRate,covered} from './engine.mjs';
 import {draw,screenToCell,centerOn,cellTop,TW,TH} from './render.mjs';
 
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=n=>Math.floor(n).toLocaleString('de-DE');
-let game=null,cam={x:0,y:0,z:1},cur='hand',group='hand',sel=null,preview=null,showNeeds=true,canvas,ctx,W=0,Hh=0,dpr=1;
+let game=null,cam={x:0,y:0,z:1},cur='hand',group='hand',showDirt=false,sel=null,preview=null,showNeeds=true,canvas,ctx,W=0,Hh=0,dpr=1;
 
 function load(){try{return restore(localStorage.getItem(SAVE_KEY));}catch{return null;}}
 function save(){try{localStorage.setItem(SAVE_KEY,JSON.stringify(game));localStorage.setItem('my-city-foundry-at',String(Date.now()));}catch{}}
@@ -34,7 +34,7 @@ function hud(){const p=population(game),inc=incomePerMin(game),L=cityLevel(game)
  const dm=(icon,v,on)=>on?`<span class="dm" title="Nachfrage"><i>${icon}</i><u><b style="width:${Math.max(0,Math.min(100,v*2))}%"></b></u></span>`:'';
  $('#top').innerHTML=`<div class="city"><b>${esc(game.city.name)}</b><small>Level ${L} · ${citySize(p).name} · 👥 ${fmt(p)}${attractiveness(game)?` · ⭐ ${fmt(attractiveness(game))}`:''}</small><span class="lvbar"><i style="width:${share*100}%"></i></span>
   <span class="dems">${dm('🏡',d.house,true)}${dm('🛒',d.shop,unlocked(game,'zonec'))}${dm('🏭',d.factory,unlocked(game,'zonei'))}</span></div>
-  <div class="money"><b>🪙 ${fmt(game.money)}</b><small class="${inc<0?'neg':''}">${inc>=0?'+':''}${fmt(inc)} / Min.</small></div>
+  <button class="money" data-finance><b>🪙 ${fmt(game.money)}</b><small class="${inc<0?'neg':''}">${inc>=0?'+':''}${fmt(inc)} / Min.</small></button><button class="icon happy" data-finance title="Zufriedenheit">${happyIcon(happiness(game))}<small>${happiness(game)}%</small></button>
   <button class="icon" data-needs title="Wünsche anzeigen">${showNeeds?'💬':'🔕'}</button><button class="icon" data-settings aria-label="Einstellungen">⚙️</button>`;}
 function toolbar(){const lv=cityLevel(game);
  $('#tools').innerHTML=GROUPS.map(G=>{const ts=TOOLS.filter(t=>t.group===G.id),open=ts.some(t=>unlocked(game,t.id)),fresh=ts.filter(t=>unlocked(game,t.id)&&!built(game,t.id)&&t.lvl>1&&t.lvl>=lv-1).length;
@@ -43,7 +43,7 @@ function toolbar(){const lv=cityLevel(game);
  if(ts.length>1){sub.innerHTML=ts.map(t=>{const o=unlocked(game,t.id),done=t.once&&built(game,t.id);return`<button class="${cur===t.id?'on':''} ${o&&!done?'':'locked'}" data-tool="${t.id}"><span>${o?t.icon:'🔒'}</span>${t.name}<small>${!o?'ab Level '+t.lvl:done?'gebaut':fmt(t.cost)+(t.size>1?` · ${t.size}×${t.size}`:'')}</small></button>`;}).join('');sub.classList.remove('hidden');}
  else sub.classList.add('hidden');}
 
-function loop(t){if(!game||!canvas)return;draw(ctx,game,cam,{w:W,h:Hh,dpr,sel,preview,t,showNeeds,money:game.money});requestAnimationFrame(loop);}
+function loop(t){if(!game||!canvas)return;draw(ctx,game,cam,{w:W,h:Hh,dpr,sel,preview,t,showNeeds,money:game.money,dirt:showDirt||['zone','zonei','power','airport'].includes(cur)});requestAnimationFrame(loop);}
 setInterval(()=>{if(!game||!canvas)return;const before=population(game),bj=jobs(game);game=update(game,Date.now());const p=population(game);
  if(p>before)toast('Neue Einwohner sind eingezogen! 🏡');else if(jobs(game)>bj)toast('Neue Arbeitsplätze in der Stadt! 💼');hud();levelUps();if(sel&&!$('#panel').dataset.modal)panel();},1000);
 setInterval(()=>{if(game)save();},5000);
@@ -116,6 +116,20 @@ function bindPointer(){const pts=new Map();let start=null,moved=false,painting=f
  canvas.addEventListener('pointerleave',()=>{preview=null;});
  canvas.addEventListener('wheel',e=>{e.preventDefault();const z=Math.max(0.35,Math.min(2.6,cam.z*(e.deltaY<0?1.12:1/1.12)));cam.x=e.clientX-(e.clientX-cam.x)*z/cam.z;cam.y=e.clientY-(e.clientY-cam.y)*z/cam.z;cam.z=z;},{passive:false});}
 
+// ---------- Finanzen und Zufriedenheit ----------
+function finance(){const p=$('#panel');delete p.dataset.modal;sel=null;const f=finances(game),h=happiness(game),t=taxRate(game);
+ const row=(l,v,neg)=>`<li><span>${l}</span><b class="${neg||v<0?'neg':'pos'}">${neg||v<0?'−':'+'}${fmt(Math.abs(v))}</b></li>`;
+ p.innerHTML=`<button class="close" data-close aria-label="Schließen">✕</button><h3>🪙 Stadtkasse</h3>
+  <ul class="fin">${row('👥 Steuern der Einwohner',f.people)}${row('🛒🏭 Steuern von Läden und Fabriken',f.biz)}${row('🧳 Touristen',f.tour)}${row('🔧 Unterhalt (Kraftwerke, Dienste …)',f.upkeep,true)}<li class="sum"><span>pro Minute</span><b class="${f.total<0?'neg':'pos'}">${f.total>=0?'+':''}${fmt(f.total)}</b></li></ul>
+  <label class="field taxf"><span>Steuersatz: <b id="taxv">${t} %</b> <small class="muted">(normal ${TAX_DEFAULT} %)</small></span><input type="range" id="tax" min="${TAX_MIN}" max="${TAX_MAX}" step="1" value="${t}"></label>
+  <p class="muted small">Höhere Steuern bringen mehr Geld, machen die Bürger aber unzufrieden – dann ziehen weniger Leute her. Niedrige Steuern machen glücklich.</p>
+  <h3>${happyIcon(h)} Zufriedenheit: ${h} % <em>${happyText(h)}</em></h3><span class="lvbar wide"><i style="width:${h}%;background:${h>=60?'var(--green)':h>=HAPPY_MIN?'var(--gold)':'var(--red)'}"></i></span>
+  <ul class="fin">${mood(game).filter(m=>m.v).map(m=>row(m.text,m.v)).join('')||'<li>Alles im grünen Bereich.</li>'}</ul>
+  <p class="muted small">Unter ${HAPPY_MIN} % wachsen keine Wohnblocks und Hochhäuser mehr.</p>
+  <button class="${showDirt?'on':''} wideb" data-dirt>🌫️ Dreck und Lärm auf der Karte ${showDirt?'ausblenden':'zeigen'}</button>`;p.classList.remove('hidden');
+ $('#tax').oninput=e=>{$('#taxv').textContent=e.target.value+' %';};
+ $('#tax').onchange=e=>{const r=act(game,{type:'setTax',tax:e.target.value},Date.now());if(r.error)return toast(r.error,'err');game=r.game;save();hud();finance();};}
+
 // ---------- Einstellungen ----------
 function settings(){const p=$('#panel');delete p.dataset.modal;const n=counts(game);sel=null;
  p.innerHTML=`<button class="close" data-close aria-label="Schließen">✕</button><h3>⚙️ ${esc(game.city.name)}</h3>
@@ -130,6 +144,8 @@ document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b||
  if('close'in d){sel=null;delete $('#panel').dataset.modal;return panel();}
  if('upgrade'in d){const r=act(game,{type:'upgrade',x:sel.x,y:sel.y},Date.now());if(r.error)return toast(r.error,'err');game=r.game;save();toast(r.message,'gold');hud();panel();return levelUps();}
  if('needs'in d){showNeeds=!showNeeds;return hud();}
+ if('finance'in d)return finance();
+ if('dirt'in d){showDirt=!showDirt;return finance();}
  if('settings'in d)return settings();
  if('rename'in d){const r=act(game,{type:'renameCity',name:$('#cityname').value},Date.now());if(r.error)return toast(r.error,'err');game=r.game;save();toast(r.message);hud();return settings();}
  if('reset'in d){if(confirm(`Wirklich eine neue Stadt gründen? ${game.city.name} wird gelöscht.`)){localStorage.removeItem(SAVE_KEY);game=null;canvas=null;renderStart();}}});

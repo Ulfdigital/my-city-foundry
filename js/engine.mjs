@@ -1,6 +1,7 @@
 // My City Foundry – Spiellogik. Reine Funktionen: act(game, action, now) → {game, error, message}.
 import {VERSION,MAP_W,MAP_H,OLD_MAP,START_MONEY,OFFLINE_MAX_H,TOOLS,tool,ZONES,TREE_CLEAR,LEVELS,MAX_LEVEL,BIZ,bizMax,TAX_PER_PERSON,MOVE_IN_SEC,
- MAX_CITY_LEVEL,levelPop,LEVEL_BONUS,WORKER_SHARE,FREE_WORKERS,SHOP_SHARE,FACTORY_SHARE,ATTR_MOVE} from './data.mjs';
+ MAX_CITY_LEVEL,levelPop,LEVEL_BONUS,WORKER_SHARE,FREE_WORKERS,SHOP_SHARE,FACTORY_SHARE,ATTR_MOVE,
+ TAX_DEFAULT,TAX_MIN,TAX_MAX,FACTORY_DIRT,HAPPY_MIN} from './data.mjs';
 
 const MIN=6e4,H=36e5;
 export function rand(g){let t=(g.seed=(g.seed+0x6D2B79F5)>>>0);t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296;}
@@ -28,18 +29,19 @@ function migrate(g){const off=Math.floor((MAP_W-OLD_MAP)/2),old=g.tiles,t=Array.
 
 // ---------- Werte der Stadt (zwischengespeichert, bis sich die Karte ändert) ----------
 const cache=new WeakMap();
-const PROVIDES=['power','water','park','school','fire','police','hospital','bus','shop'];
+const PROVIDES=['power','water','park','school','fire','police','hospital','bus','shop','dirt'];
 export function info(g){const hit=cache.get(g);if(hit&&hit.rev===(g.rev||0))return hit.v;
- const v={pop:0,jobs:0,jobsShop:0,jobsFactory:0,upkeep:0,biztax:0,attr:0,tour:0,count:{},cover:{}};
+ const v={pop:0,dirtyPop:0,jobs:0,jobsShop:0,jobsFactory:0,upkeep:0,biztax:0,attr:0,tour:0,count:{},cover:{}};
  for(const p of PROVIDES)v.cover[p]=new Uint8Array(MAP_W*MAP_H);
  const stamp=(type,x0,y0,size,r)=>{const cv=v.cover[type];for(let y=Math.max(0,y0-r);y<=Math.min(MAP_H-1,y0+size-1+r);y++)for(let x=Math.max(0,x0-r);x<=Math.min(MAP_W-1,x0+size-1+r);x++){
   const dx=x<x0?x0-x:x>x0+size-1?x-(x0+size-1):0,dy=y<y0?y0-y:y>y0+size-1?y-(y0+size-1):0;if(dx+dy<=r)cv[idx(x,y)]=1;}};
  for(let i=0;i<g.tiles.length;i++){const c=g.tiles[i],x=i%MAP_W,y=Math.floor(i/MAP_W);
   if(c.t==='house'){v.pop+=LEVELS[c.lvl].people;continue;}
-  if(BIZ[c.t]){const j=BIZ[c.t].jobs[c.lvl];v.jobs+=j;if(c.t==='shop'){v.jobsShop+=j;stamp('shop',x,y,1,BIZ.shop.radius);}else v.jobsFactory+=j;v.biztax+=BIZ[c.t].tax[c.lvl];if(c.t==='factory')v.attr-=c.lvl;continue;}
+  if(BIZ[c.t]){const j=BIZ[c.t].jobs[c.lvl];v.jobs+=j;if(c.t==='shop'){v.jobsShop+=j;stamp('shop',x,y,1,BIZ.shop.radius);}else v.jobsFactory+=j;v.biztax+=BIZ[c.t].tax[c.lvl];if(c.t==='factory'){v.attr-=c.lvl;stamp('dirt',x,y,1,FACTORY_DIRT[c.lvl]);}continue;}
   const T=tool(c.t);if(!T||c.part)continue;                 // Teile großer Gebäude nur einmal (am Ursprung) zählen
   v.count[c.t]=(v.count[c.t]||0)+1;v.upkeep+=T.upkeep||0;v.jobs+=T.jobs||0;v.attr+=T.attr||0;v.tour+=T.tour||0;
-  if(T.provides)stamp(T.provides,x,y,T.size||1,T.radius);}
+  if(T.provides)stamp(T.provides,x,y,T.size||1,T.radius);if(T.dirt)stamp('dirt',x,y,T.size||1,T.dirt);}
+ for(let i=0;i<g.tiles.length;i++){const c=g.tiles[i];if(c.t==='house'&&v.cover.dirt[i])v.dirtyPop+=LEVELS[c.lvl].people;}
  v.attr=Math.max(0,v.attr);cache.set(g,{rev:g.rev||0,v});return v;}
 
 export function hasRoad(g,x,y){const c=tile(g,x,y),s=c?.rx!==undefined?tool(c.t).size||1:1;const x0=c?.rx??x,y0=c?.ry??y;
@@ -51,16 +53,27 @@ export function jobs(g,kind){const v=info(g);return kind==='shop'?v.jobsShop:kin
 export function attractiveness(g){return info(g).attr;}
 export function tourism(g){const v=info(g);return Math.round(v.tour*(1+Math.min(v.attr,150)/200));}
 export function upkeep(g){return info(g).upkeep;}
-export function incomePerMin(g){const v=info(g);return v.pop*TAX_PER_PERSON+v.biztax+tourism(g)-v.upkeep;}
+export function taxRate(g){return g.tax??TAX_DEFAULT;}
+export function finances(g){const v=info(g),f=taxRate(g)/TAX_DEFAULT;const people=Math.round(v.pop*TAX_PER_PERSON*f),biz=Math.round(v.biztax*f),tour=tourism(g);return{people,biz,tour,upkeep:v.upkeep,total:people+biz+tour-v.upkeep};}
+export function incomePerMin(g){return finances(g).total;}
+// Zufriedenheit 0–100: Steuern, Attraktivität, Dreck und Lärm, Arbeitslosigkeit
+export function happiness(g){const v=info(g);if(!v.pop)return 60;const parts=mood(g);return Math.max(0,Math.min(100,Math.round(60+parts.reduce((a,p)=>a+p.v,0))));}
+export function mood(g){const v=info(g),t=taxRate(g),out=[];
+ out.push({k:'tax',v:(TAX_DEFAULT-t)*4,text:`Steuern ${t} %`});
+ out.push({k:'attr',v:Math.min(20,Math.round(v.attr/5)),text:'Parks, Freizeit und Sehenswürdigkeiten'});
+ const dirty=v.pop?v.dirtyPop/v.pop:0;out.push({k:'dirt',v:-Math.round(dirty*30),text:'Dreck und Lärm in Wohngebieten'});
+ const idle=Math.max(0,v.pop*WORKER_SHARE-v.jobs-FREE_WORKERS);out.push({k:'jobs',v:-Math.min(20,Math.round(idle/Math.max(10,v.pop*0.02))),text:'Arbeitslose'});
+ return out;}
 // Nachfrage wie bei SimCity: > 0 heißt, es wird mehr davon gebraucht
 export function demand(g){const v=info(g),w=v.pop*WORKER_SHARE;
- return{house:Math.round(v.jobs+FREE_WORKERS+Math.min(v.attr,150)*ATTR_MOVE-w),shop:Math.round(v.pop*SHOP_SHARE-v.jobsShop+3),factory:Math.round(v.pop*FACTORY_SHARE-v.jobsFactory+5)};}
+ const hp=happiness(g);
+ return{house:Math.round(v.jobs+FREE_WORKERS+Math.min(v.attr,150)*ATTR_MOVE-w+(hp-60)*Math.max(1,v.pop/400)),shop:Math.round(v.pop*SHOP_SHARE-v.jobsShop+3),factory:Math.round(v.pop*FACTORY_SHARE-v.jobsFactory+5)};}
 export function cityLevel(g){return g.level||1;}
 export function nextLevelPop(g){const l=cityLevel(g);return l<MAX_CITY_LEVEL?levelPop(l+1):null;}
 export function unlocked(g,id){return cityLevel(g)>=(tool(id)?.lvl||1);}
 export function built(g,id){return info(g).count[id]||0;}
 function spec(g,x,y,level){const c=tile(g,x,y);if(c.t==='house')return{need:LEVELS[level].need,city:LEVELS[level].city||1};const B=BIZ[c.t];return{need:B.need[level],city:B.city[level]||1};}
-export function has(g,x,y,need,city=1){if(need==='road')return hasRoad(g,x,y);if(need==='jobs')return demand(g).house>0;if(need==='city')return cityLevel(g)>=city;return covered(g,x,y,need);}
+export function has(g,x,y,need,city=1){if(need==='road')return hasRoad(g,x,y);if(need==='jobs')return demand(g).house>0;if(need==='city')return cityLevel(g)>=city;if(need==='clean')return !covered(g,x,y,'dirt');if(need==='happy')return happiness(g)>=HAPPY_MIN;return covered(g,x,y,need);}
 export function missing(g,x,y,level){const s=spec(g,x,y,level);return s.need.filter(n=>!has(g,x,y,n,s.city));}
 export function maxLevel(c){return c.t==='house'?MAX_LEVEL:bizMax(c.t);}
 export function canUpgrade(g,x,y){const c=tile(g,x,y);if(!(c?.t==='house'||BIZ[c?.t])||c.lvl>=maxLevel(c))return false;return missing(g,x,y,c.lvl+1).length===0;}
@@ -71,7 +84,7 @@ function levelUp(g){const p=population(g);let l=cityLevel(g);while(l<MAX_CITY_LE
 
 // ---------- Spielstand ----------
 export function newGame(now=Date.now(),{cityName='Neustadt'}={},seed=Math.floor(now%2147483647)||1){
- const g={version:VERSION,level:1,levelUps:[],city:{name:String(cityName).trim().slice(0,30)||'Neustadt'},money:START_MONEY,seed:seed>>>0,tiles:null,start:null,stats:{},rev:0,createdAt:now,lastAt:now,earned:0};
+ const g={version:VERSION,tax:TAX_DEFAULT,level:1,levelUps:[],city:{name:String(cityName).trim().slice(0,30)||'Neustadt'},money:START_MONEY,seed:seed>>>0,tiles:null,start:null,stats:{},rev:0,createdAt:now,lastAt:now,earned:0};
  makeMap(g);return update(g,now);}
 export function update(g,now){const dt=Math.max(0,Math.min(now-(g.lastAt||now),OFFLINE_MAX_H*H));
  if(dt>0){const inc=incomePerMin(g)*dt/MIN;g.money=Math.round((g.money+inc)*100)/100;if(inc>0)g.earned=(g.earned||0)+inc;if(g.money<0)g.money=0;}
@@ -86,7 +99,7 @@ export function update(g,now){const dt=Math.max(0,Math.min(now-(g.lastAt||now),O
  g.lastAt=Math.max(g.lastAt||0,now);return g;}
 export function restore(raw){try{const g=typeof raw==='string'?JSON.parse(raw):raw;if(!g||g.version!==VERSION||!Array.isArray(g.tiles))return null;
  if(g.tiles.length===OLD_MAP*OLD_MAP)migrate(g);else if(g.tiles.length!==MAP_W*MAP_H)return null;
- g.stats=g.stats||{};g.level=g.level||1;g.levelUps=g.levelUps||[];g.rev=g.rev||0;return g;}catch{return null;}}
+ g.stats=g.stats||{};g.level=g.level||1;g.levelUps=g.levelUps||[];g.rev=g.rev||0;if(g.tax===undefined)g.tax=TAX_DEFAULT;return g;}catch{return null;}}
 const moveIn=g=>Math.round((MOVE_IN_SEC[0]+rand(g)*(MOVE_IN_SEC[1]-MOVE_IN_SEC[0]))*1000);
 function stat(g,k,n=1){g.stats[k]=(g.stats[k]||0)+n;}
 function pay(g,n,what){if(g.money<n)throw new Error(`Dafür fehlt Geld: ${what} kostet ${Math.ceil(n).toLocaleString('de-DE')} Taler.`);g.money=Math.round((g.money-n)*100)/100;}
@@ -114,9 +127,10 @@ const A={
   return T.size||T.attr>=10?`${T.icon} ${T.name} ist fertig!`:null;},
  upgrade(g,{x,y},now){const c=tile(g,x,y);if(!(c?.t==='house'||BIZ[c?.t]))throw new Error('Hier gibt es nichts auszubauen.');if(c.lvl>=maxLevel(c))throw new Error(c.t==='house'?'Höher geht es nicht – ein echter Wolkenkratzer!':'Das ist schon die größte Stufe.');
   const next=c.lvl+1,miss=missing(g,x,y,next),sp=spec(g,x,y,next);
-  if(miss.length)throw new Error(`Zum Ausbauen fehlt noch: ${miss.map(m=>({road:'Straße',power:'Strom',water:'Wasser',park:'Park',jobs:'Arbeitsplätze',shop:'ein Laden in der Nähe',school:'Schule',fire:'Feuerwehr',police:'Polizei',hospital:'Krankenhaus',bus:'Busbahnhof',city:`Stadt-Level ${sp.city}`}[m])).join(', ')}.`);
+  if(miss.length)throw new Error(`Zum Ausbauen fehlt noch: ${miss.map(m=>({road:'Straße',power:'Strom',water:'Wasser',park:'Park',jobs:'Arbeitsplätze',shop:'ein Laden in der Nähe',school:'Schule',fire:'Feuerwehr',police:'Polizei',hospital:'Krankenhaus',bus:'Busbahnhof',clean:'weniger Dreck und Lärm',happy:'zufriedene Bürger',city:`Stadt-Level ${sp.city}`}[m])).join(', ')}.`);
   const name=c.t==='house'?LEVELS[next].name:BIZ[c.t].names[next];pay(g,upgradeCost(c),name);c.lvl=next;c.since=now;touch(g);stat(g,'upgrade');levelUp(g);
   return c.t==='house'?`Ausgebaut: ${name}! Jetzt wohnen hier ${LEVELS[next].people} Leute. 🏗️`:`Ausgebaut: ${name}! ${BIZ[c.t].jobs[next]} Arbeitsplätze. 🏗️`;},
+ setTax(g,{tax}){const t=Math.round(+tax);if(!(t>=TAX_MIN&&t<=TAX_MAX))throw new Error(`Der Steuersatz muss zwischen ${TAX_MIN} und ${TAX_MAX} % liegen.`);g.tax=t;touch(g);return null;},
  seenLevelUps(g){g.levelUps=[];return null;},
  renameCity(g,{name}){const n=String(name||'').trim().slice(0,30);if(n.length<2)throw new Error('Der Name ist zu kurz.');g.city.name=n;return`Deine Stadt heißt jetzt ${n}.`;}};
 

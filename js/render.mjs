@@ -1,6 +1,6 @@
 // My City Foundry – Zeichnen der Stadt in schräger Draufsicht (isometrisch) auf einem Canvas.
 import {MAP_W,MAP_H,LEVELS,NEEDS,BIZ,tool} from './data.mjs';
-import {tile,missing,maxLevel,upgradeCost} from './engine.mjs';
+import {tile,missing,maxLevel,upgradeCost,covered} from './engine.mjs';
 
 export const TW=64,TH=32;
 export const cellTop=(x,y)=>({x:(x-y)*TW/2,y:(x+y)*TH/2});
@@ -152,13 +152,14 @@ function bubble(ctx,cx,cy,text,bg){ctx.fillStyle=bg;ctx.strokeStyle='rgba(0,0,0,
  ctx.font='11px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#222';ctx.fillText(text,cx,cy+0.5);ctx.textBaseline='alphabetic';}
 const HEIGHT={house:[0,30,38,40,60,104,170],shop:[0,22,30,46],factory:[0,24,48,74]};
 
-export function draw(ctx,g,cam,{w,h,dpr,sel,preview,t,showNeeds,money}){
+export function draw(ctx,g,cam,{w,h,dpr,sel,preview,t,showNeeds,money,dirt}){
  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='#5f9d4b';ctx.fillRect(0,0,w,h);
  ctx.setTransform(dpr*cam.z,0,0,dpr*cam.z,dpr*cam.x,dpr*cam.y);
  const pad=200;
  for(let d=0;d<MAP_W+MAP_H-1;d++)for(let x=Math.max(0,d-MAP_H+1);x<=Math.min(d,MAP_W-1);x++){const y=d-x,p=cellTop(x,y),cx=p.x,cy=p.y+TH/2;
   const sx=cx*cam.z+cam.x,sy=cy*cam.z+cam.y;if(sx<-pad||sx>w+pad||sy<-pad||sy>h+pad*2)continue;
   const c=g.tiles[y*MAP_W+x];ground(ctx,c,x,y,cx,cy,t);if(c.t==='road')roadMarks(ctx,g,x,y,cx,cy);
+  if(dirt&&covered(g,x,y,'dirt')){ctx.fillStyle='rgba(120,80,40,.38)';diamond(ctx,cx,cy,TW/2,TH/2);ctx.fill();}
   if(preview&&x>=preview.x&&y>=preview.y&&x<preview.x+(preview.n||1)&&y<preview.y+(preview.n||1)){ctx.fillStyle=preview.ok?'rgba(255,255,255,.35)':'rgba(220,60,40,.35)';diamond(ctx,cx,cy,TW/2,TH/2);ctx.fill();}
   if(sel&&sel.x===x&&sel.y===y){ctx.strokeStyle='#ffd23f';ctx.lineWidth=2.5;diamond(ctx,cx,cy,TW/2-1,TH/2-1);ctx.stroke();}
   building(ctx,c,x,y,cx,cy,t);

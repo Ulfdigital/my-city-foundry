@@ -1,7 +1,7 @@
 // My City Foundry – Spieldaten. Stadtaufbau ab etwa 10 Jahren.
 export const VERSION=1;
 export const SAVE_KEY='my-city-foundry-v1';   // nie ändern – sonst ist der Spielstand weg
-export const BUILD='0.3.0';                    // muss zu package.json und version.json passen (Update-Prüfung in der App)
+export const BUILD='0.4.0';                    // muss zu package.json und version.json passen (Update-Prüfung in der App)
 export const MAP_W=64,MAP_H=64;
 export const OLD_MAP=40;                       // Städte aus Version 0.1/0.2 (40×40) werden in die Mitte der großen Karte gesetzt
 export const START_MONEY=6000;
@@ -32,7 +32,7 @@ export const TOOLS=[
  {id:'zone',group:'zones',name:'Wohnen',icon:'🏡',cost:25,lvl:1,text:'Hier ziehen Leute ein.'},
  {id:'zonec',group:'zones',name:'Läden',icon:'🛒',cost:30,lvl:2,text:'Läden und Büros mit Arbeitsplätzen.'},
  {id:'zonei',group:'zones',name:'Fabriken',icon:'🏭',cost:40,lvl:3,text:'Fabriken mit vielen Arbeitsplätzen. Brauchen Strom.'},
- {id:'power',group:'supply',name:'Kraftwerk',icon:'🏭',cost:1500,upkeep:6,radius:12,provides:'power',lvl:2,jobs:20,attr:-3},
+ {id:'power',group:'supply',name:'Kraftwerk',icon:'🏭',cost:1500,upkeep:6,radius:12,provides:'power',lvl:2,jobs:20,attr:-3,dirt:3},
  {id:'tower',group:'supply',name:'Wasserturm',icon:'💧',cost:800,upkeep:4,radius:9,provides:'water',lvl:3,jobs:4},
  {id:'wind',group:'supply',name:'Windpark',icon:'🌬️',cost:4000,upkeep:3,radius:14,provides:'power',size:2,lvl:12,jobs:10,attr:2},
  {id:'pump',group:'supply',name:'Wasserwerk',icon:'🚰',cost:5000,upkeep:6,radius:16,provides:'water',size:2,lvl:15,jobs:30},
@@ -52,12 +52,12 @@ export const TOOLS=[
  {id:'themepark',group:'fun',name:'Freizeitpark',icon:'🎢',cost:40000,upkeep:20,size:3,lvl:34,jobs:200,attr:30,tour:180,once:true},
  {id:'cityhall',group:'special',name:'Rathaus',icon:'🏛️',cost:5000,upkeep:5,size:2,lvl:7,jobs:40,attr:10,once:true},
  {id:'museum',group:'special',name:'Museum',icon:'🖼️',cost:12000,upkeep:6,size:2,lvl:18,jobs:30,attr:12,tour:50},
- {id:'stadium',group:'special',name:'Stadion',icon:'🏟️',cost:30000,upkeep:15,size:3,lvl:20,jobs:120,attr:25,tour:120,once:true},
- {id:'harbor',group:'special',name:'Hafen',icon:'⚓',cost:35000,upkeep:15,size:2,lvl:30,jobs:600,attr:8,tour:60,once:true,nearWater:true},
+ {id:'stadium',group:'special',name:'Stadion',icon:'🏟️',cost:30000,upkeep:15,size:3,lvl:20,jobs:120,attr:25,tour:120,once:true,dirt:2},
+ {id:'harbor',group:'special',name:'Hafen',icon:'⚓',cost:35000,upkeep:15,size:2,lvl:30,jobs:600,attr:8,tour:60,once:true,nearWater:true,dirt:2},
  {id:'hotel',group:'special',name:'Hotel',icon:'🏨',cost:15000,upkeep:6,size:2,lvl:32,jobs:150,attr:6,tour:90},
  {id:'expo',group:'special',name:'Messe',icon:'🎪',cost:45000,upkeep:15,size:3,lvl:36,jobs:400,attr:15,tour:200,once:true},
  {id:'tvtower',group:'special',name:'Fernsehturm',icon:'🗼',cost:50000,upkeep:8,lvl:38,jobs:40,attr:30,tour:150,once:true},
- {id:'airport',group:'special',name:'Flughafen',icon:'✈️',cost:120000,upkeep:40,size:3,lvl:40,jobs:2000,attr:35,tour:600,once:true},
+ {id:'airport',group:'special',name:'Flughafen',icon:'✈️',cost:120000,upkeep:40,size:3,lvl:40,jobs:2000,attr:35,tour:600,once:true,dirt:4},
  {id:'concert',group:'special',name:'Konzerthaus',icon:'🎼',cost:60000,upkeep:12,size:2,lvl:44,jobs:120,attr:25,tour:250,once:true},
  {id:'research',group:'special',name:'Forschungszentrum',icon:'🔬',cost:90000,upkeep:25,size:2,lvl:47,jobs:1200,attr:20,tour:100,once:true},
  {id:'space',group:'special',name:'Raumfahrtzentrum',icon:'🚀',cost:250000,upkeep:50,size:3,lvl:50,jobs:3000,attr:60,tour:1500,once:true}];
@@ -71,9 +71,9 @@ export const LEVELS=[null,
  {name:'Häuschen',people:4,cost:0,need:['road']},
  {name:'Einfamilienhaus',people:8,cost:250,need:['road']},
  {name:'Mehrfamilienhaus',people:20,cost:700,need:['road','power','jobs']},
- {name:'Wohnblock',people:50,cost:1800,need:['road','power','water','jobs','shop','school']},
- {name:'Hochhaus',people:120,cost:4500,need:['road','power','water','jobs','shop','school','park','fire','police','city'],city:11},
- {name:'Wolkenkratzer',people:300,cost:12000,need:['road','power','water','jobs','shop','school','park','fire','police','hospital','city'],city:20}];
+ {name:'Wohnblock',people:50,cost:1800,need:['road','power','water','jobs','shop','school','clean','happy']},
+ {name:'Hochhaus',people:120,cost:4500,need:['road','power','water','jobs','shop','school','park','fire','police','clean','happy','city'],city:11},
+ {name:'Wolkenkratzer',people:300,cost:12000,need:['road','power','water','jobs','shop','school','park','fire','police','hospital','clean','happy','city'],city:20}];
 export const MAX_LEVEL=6;
 // ---------- Läden/Büros und Fabriken ----------
 export const BIZ={
@@ -84,7 +84,7 @@ export const BIZ={
 export const bizMax=t=>BIZ[t].names.length-1;
 export const NEEDS={road:{icon:'🛣️',text:'Straße direkt am Grundstück'},power:{icon:'⚡',text:'Strom (Kraftwerk, Wind- oder Solarpark in der Nähe)'},water:{icon:'💧',text:'Wasser (Wasserturm oder Wasserwerk in der Nähe)'},
  park:{icon:'🌳',text:'Park oder Freizeit in der Nähe'},jobs:{icon:'💼',text:'genug Arbeitsplätze in der Stadt'},shop:{icon:'🛒',text:'Laden in der Nähe'},school:{icon:'🏫',text:'Schule in der Nähe'},
- fire:{icon:'🚒',text:'Feuerwehr in der Nähe'},police:{icon:'🚓',text:'Polizei in der Nähe'},hospital:{icon:'🏥',text:'Krankenhaus in der Nähe'},bus:{icon:'🚌',text:'Busbahnhof in der Nähe'},city:{icon:'🏙️',text:'höheres Stadt-Level'}};
+ fire:{icon:'🚒',text:'Feuerwehr in der Nähe'},police:{icon:'🚓',text:'Polizei in der Nähe'},hospital:{icon:'🏥',text:'Krankenhaus in der Nähe'},bus:{icon:'🚌',text:'Busbahnhof in der Nähe'},clean:{icon:'🌫️',text:'kein Dreck und Lärm (Fabriken, Kraftwerk, Flughafen weiter weg)'},happy:{icon:'😊',text:'Bürger zufrieden (mindestens 40 %)'},city:{icon:'🏙️',text:'höheres Stadt-Level'}};
 
 // ---------- Wirtschaft ----------
 export const TAX_PER_PERSON=1;              // Taler pro Einwohner und Minute
@@ -94,6 +94,13 @@ export const FREE_WORKERS=30;               // so viele Arbeitslose verträgt di
 export const SHOP_SHARE=0.18;               // Läden-Arbeitsplätze pro Einwohner, die gebraucht werden
 export const FACTORY_SHARE=0.3;             // Fabrik-Arbeitsplätze pro Einwohner, die gebraucht werden
 export const ATTR_MOVE=2;                   // je Attraktivitäts-Punkt ziehen so viele Leute zusätzlich gern her
+
+// ---------- Steuern, Zufriedenheit, Umwelt (0.4) ----------
+export const TAX_DEFAULT=9,TAX_MIN=0,TAX_MAX=20;          // Steuersatz in Prozent; 9 % = normal
+export const FACTORY_DIRT=[0,2,2,3,3];                     // Reichweite von Dreck und Lärm je Fabrik-Stufe
+export const HAPPY_MIN=40;                                  // ab dieser Zufriedenheit wachsen große Häuser
+export const happyText=h=>h>=80?'begeistert':h>=60?'zufrieden':h>=40?'geht so':h>=20?'unzufrieden':'wütend';
+export const happyIcon=h=>h>=80?'😄':h>=60?'🙂':h>=40?'😐':h>=20?'🙁':'😠';
 
 export const CITY_SIZES=[{min:0,name:'Dorf'},{min:100,name:'Kleinstadt'},{min:1000,name:'Stadt'},{min:5000,name:'Großstadt'},{min:20000,name:'Metropole'},{min:80000,name:'Weltstadt'}];
 export const citySize=p=>[...CITY_SIZES].reverse().find(c=>p>=c.min);
