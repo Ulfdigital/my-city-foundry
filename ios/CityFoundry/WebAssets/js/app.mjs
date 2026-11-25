@@ -1,7 +1,8 @@
 // My City Foundry – Oberfläche: Karte zum Verschieben/Zoomen, Werkzeugleiste, Infofenster. Speichert automatisch auf dem Gerät.
 import {SAVE_KEY,TOOLS,GROUPS,tool,LEVELS,MAX_LEVEL,NEEDS,TREE_CLEAR,citySize,MAP_W,MAP_H,BIZ,bizMax,BUILD,levelPop,MAX_CITY_LEVEL,TAX_MIN,TAX_MAX,TAX_DEFAULT,happyText,happyIcon,HAPPY_MIN,SECTOR,ROAD_LANES,LAND_LEVEL,FEATURES,GOODS,NEIGHBORS,TRADE_PRICE,LOCAL_PRICE,WANTED_BONUS} from './data.mjs';
 import {newGame,act,update,restore,tile,population,incomePerMin,missing,has,hasRoad,counts,cityLevel,nextLevelPop,unlocked,demand,jobs,maxLevel,upgradeCost,attractiveness,tourism,built,canPlace,happiness,mood,finances,taxRate,covered,owns,canBuy,sectorPrice,jam,taskProgress,taskDone,features,trade,wanted,nextWantedChange} from './engine.mjs';
-import {draw,screenToCell,centerOn,cellTop,TW,TH} from './render.mjs';
+import {draw,screenToCell,centerOn,cellTop,TW,TH,dayNight,season,weather,SEASONS,WEATHER} from './render.mjs';
+import {sfx,unlock,settings as audio,saveSettings,startMusic,stopMusic,setMusicMood} from './sound.mjs';
 
 const $=s=>document.querySelector(s);
 // In der iPhone-App: Links nach außen (Impressum) über die App im Browser öffnen
@@ -23,13 +24,13 @@ function renderStart(){document.body.className='startmode';
   <ul class="how"><li>🛣️ Straßen bauen</li><li>🏡 Wohngebiete an die Straße legen – dann ziehen Leute ein</li><li>⚡💧🌳 Strom, Wasser und Parks bringen</li><li>⬆️ Häuser ausbauen – bis zum Wolkenkratzer</li></ul>
   <p class="legal"><a href="datenschutz.html">Datenschutz</a> · <a href="https://mentaro-online.app/impressum" target="_blank" rel="noopener">Impressum</a></p></main>`;
  $('#go').onclick=()=>{const n=$('#city').value.trim();if(n.length<2){toast('Gib deiner Stadt einen Namen (mindestens 2 Buchstaben).','err');return;}
-  game=newGame(Date.now(),{cityName:n});save();startCity();toast(`Willkommen in ${game.city.name}! 🎉`);};}
+  game=newGame(Date.now(),{cityName:n});game.tut={step:0,base:{...game.stats}};save();startCity();toast(`Willkommen in ${game.city.name}! 🎉`);};}
 
 // ---------- Stadt ----------
 function startCity(){document.body.className='citymode';
  $('#app').innerHTML=`<canvas id="map"></canvas><header class="top" id="top"></header><div id="panel" class="panel hidden"></div><div class="sub hidden" id="sub"></div><nav class="tools" id="tools"></nav>`;
  canvas=$('#map');ctx=canvas.getContext('2d');resize();cam.z=W<600?1.3:1.4;centerOn(cam,game.start.x,game.start.y+1,W,Hh);
- hud();toolbar();bindPointer();requestAnimationFrame(loop);}
+ hud();toolbar();bindPointer();requestAnimationFrame(loop);tutShow();}
 // Größe immer frisch messen: In der App ist das Fenster beim Start manchmal noch klein (dann war die Karte nur ein Streifen).
 function size(){const e=document.documentElement;return{w:Math.max(window.innerWidth||0,e.clientWidth||0),h:Math.max(window.innerHeight||0,e.clientHeight||0),d:Math.min(2,window.devicePixelRatio||1)};}
 function resize(){const s=size();dpr=s.d;W=s.w;Hh=s.h;if(!canvas)return;canvas.width=Math.round(W*dpr);canvas.height=Math.round(Hh*dpr);canvas.style.width=W+'px';canvas.style.height=Hh+'px';}
@@ -40,24 +41,28 @@ function hud(){const p=population(game),inc=incomePerMin(game),L=cityLevel(game)
  // Oben nur noch kleine Schilder in den Ecken – die Karte bekommt den ganzen Bildschirm
  $('#top').innerHTML=`<button class="chip money" data-finance><b>🪙 ${fmt(game.money)}</b><small class="${inc<0?'neg':''}">${inc>=0?'+':''}${fmt(inc)} / Min.</small>
    <span class="lv">Lv ${L} · 👥 ${fmt(p)}<span class="lvbar"><i style="width:${share*100}%"></i></span></span><span class="dems">${dm('🏡',d.house,true)}${dm('🛒',d.shop,unlocked(game,'zonec'))}${dm('🏭',d.factory,unlocked(game,'zonei'))}</span></button>
-  <span class="corner"><button class="chip round happy" data-finance title="Zufriedenheit">${happyIcon(h)}<small>${h}%</small></button><button class="chip round tasksb" data-tasks title="Aufträge">📋${done?`<em>${done}</em>`:''}</button><button class="chip round" data-settings aria-label="Einstellungen">⚙️</button></span>`;}
-function toolbar(){const lv=cityLevel(game);
+  <span class="corner"><button class="chip round sky" data-sky title="Wetter">${envIcon()}</button><button class="chip round happy" data-finance title="Zufriedenheit">${happyIcon(h)}<small>${h}%</small></button><button class="chip round tasksb" data-tasks title="Aufträge">📋${done?`<em>${done}</em>`:''}</button><button class="chip round" data-settings aria-label="Einstellungen">⚙️</button></span>`;}
+// Jede Stadt beginnt am Morgen; während der Einführung scheint immer die Sonne
+const clock=now=>dayNight(now-(game?.createdAt||0)+0.03*20*60*1000);
+const sky=now=>game?.tut&&!game.tut.done?'sun':weather(now);
+function envIcon(){const now=Date.now(),dn=clock(now),w=sky(now);return`${audio.daynight&&dn.night>0.5?'🌙':WEATHER[w].icon}<small>${SEASONS[season(now)].icon}</small>`;}
+function toolbar(){setTimeout(()=>{const S=TUT[game?.tut?.step];if(game?.tut&&!game.tut.done&&S?.group)document.querySelector(`[data-group="${S.group}"]`)?.classList.add('pulse');},0);const lv=cityLevel(game);
  $('#tools').innerHTML=GROUPS.map(G=>{const ts=TOOLS.filter(t=>t.group===G.id),open=ts.some(t=>unlocked(game,t.id)),fresh=ts.filter(t=>unlocked(game,t.id)&&!built(game,t.id)&&t.lvl>1&&t.lvl>=lv-1).length;
   return`<button class="${group===G.id?'on':''} ${open?'':'locked'}" data-group="${G.id}"><span>${open?G.icon:'🔒'}</span>${G.short||G.name}${fresh?'<em>neu</em>':''}</button>`;}).join('');
  const sub=$('#sub'),ts=TOOLS.filter(t=>t.group===group);
  if(ts.length>1){sub.innerHTML=ts.map(t=>{const o=unlocked(game,t.id),done=t.once&&built(game,t.id);return`<button class="${cur===t.id?'on':''} ${o&&!done?'':'locked'}" data-tool="${t.id}"><span>${o?t.icon:'🔒'}</span>${t.name}<small>${!o?'ab Level '+t.lvl:done?'gebaut':t.id==='lanes'?'mehr Spuren':t.id==='land'?fmt(sectorPrice(game)):fmt(t.cost)+(t.size>1?` · ${t.size}×${t.size}`:'')}</small></button>`;}).join('');sub.classList.remove('hidden');}
  else sub.classList.add('hidden');}
 
-function loop(t){if(!game||!canvas)return;{const s=size();if(s.w!==W||s.h!==Hh||s.d!==dpr)resize();}draw(ctx,game,cam,{w:W,h:Hh,dpr,sel,preview,t,showNeeds,money:game.money,dirt:showDirt||['zone','zonei','power','airport'].includes(cur),traffic:showTraffic||cur==='lanes',land:cur==='land'});requestAnimationFrame(loop);}
+function loop(t){if(!game||!canvas)return;{const s=size();if(s.w!==W||s.h!==Hh||s.d!==dpr)resize();}const now=Date.now(),dn=audio.daynight?clock(now):{night:0,dusk:false};draw(ctx,game,cam,{env:{night:dn.night,dusk:dn.dusk,season:season(now),weather:sky(now)},w:W,h:Hh,dpr,sel,preview,t,showNeeds,money:game.money,dirt:showDirt||['zone','zonei','power','airport'].includes(cur),traffic:showTraffic||cur==='lanes',land:cur==='land'});requestAnimationFrame(loop);}
 setInterval(()=>{if(!game||!canvas)return;const before=population(game),bj=jobs(game);game=update(game,Date.now());const p=population(game);
- if(p>before)toast('Neue Einwohner sind eingezogen! 🏡');else if(jobs(game)>bj)toast('Neue Arbeitsplätze in der Stadt! 💼');hud();levelUps();eventsModal();if(sel&&!$('#panel').dataset.modal)panel();},1000);
+ if(p>before)toast('Neue Einwohner sind eingezogen! 🏡');else if(jobs(game)>bj)toast('Neue Arbeitsplätze in der Stadt! 💼');hud();levelUps();eventsModal();tutCheck();setMusicMood(audio.daynight&&clock(Date.now()).night>0.5);if(sel&&!$('#panel').dataset.modal)panel();},1000);
 setInterval(()=>{if(game)save();},5000);
 document.addEventListener('visibilitychange',()=>{if(game)save();});
 
 // ---------- Bauen ----------
 function anchor(x,y){const n=tool(cur)?.size||1,o=Math.floor((n-1)/2);return{x:x-o,y:y-o,n};}
 function apply(x,y,quiet){if(!game)return false;if(cur==='land'){if(!quiet)landPanel(x,y);return false;}const a=anchor(x,y);if(a.n>1&&quiet)return false;const r=act(game,{type:'build',tool:cur,x:a.x,y:a.y},Date.now());
- if(r.error){if(!quiet||/Geld/.test(r.error))toast(r.error,'err');return false;}game=r.game;save();hud();if(r.message){toast(r.message,'gold');toolbar();}return true;}
+ if(r.error){if(!quiet||/Geld/.test(r.error)){toast(r.error,'err');sfx('error');}return false;}game=r.game;save();hud();sfx(cur==='bulldoze'?'bulldoze':cur==='road'||cur==='lanes'?'road':'build');if(r.message){toast(r.message,'gold');toolbar();}tutCheck();return true;}
 function line(a,b,fn){let{x,y}=a;fn(x,y);while(x!==b.x||y!==b.y){if(x!==b.x)x+=Math.sign(b.x-x);else y+=Math.sign(b.y-y);fn(x,y);}}
 
 // ---------- Infofenster ----------
@@ -95,7 +100,7 @@ function panel(){const p=$('#panel');if(!sel){p.classList.add('hidden');return;}
  p.innerHTML=`<button class="close" data-close aria-label="Schließen">✕</button>${html}`;p.classList.remove('hidden');}
 
 // ---------- Level-Aufstieg ----------
-function levelUps(){const ups=game.levelUps||[];if(!ups.length||$('#panel').dataset.modal)return;const top=ups[ups.length-1],tools=ups.flatMap(u=>u.tools).map(tool),bonus=ups.reduce((a,u)=>a+u.bonus,0);
+function levelUps(){const ups=game.levelUps||[];if(!ups.length||$('#panel').dataset.modal)return;sfx('level');const top=ups[ups.length-1],tools=ups.flatMap(u=>u.tools).map(tool),bonus=ups.reduce((a,u)=>a+u.bonus,0);
  const r=act(game,{type:'seenLevelUps'},Date.now());game=r.game;save();toolbar();sel=null;const p=$('#panel');p.dataset.modal='1';
  p.innerHTML=`<div class="lvup"><div class="big-emo">🎉</div><h3>${esc(game.city.name)} ist jetzt Level ${top.level}!</h3><p>Belohnung: <b>${fmt(bonus)} Taler</b></p>
   ${ups.some(u=>u.lanes>0)?`<p>🛤️ Neu: <b>${ups.filter(u=>u.lanes>0).map(u=>ROAD_LANES[u.lanes].name).join(', ')}</b></p>`:''}${tools.length?`<p><b>Neu freigeschaltet:</b></p><ul class="needs">${tools.map(t=>`<li>${t.icon} <b>${t.name}</b>${t.text?' – '+t.text:''}${t.size>1?` <small class="muted">(${t.size}×${t.size})</small>`:''}</li>`).join('')}</ul>`:''}
@@ -129,6 +134,23 @@ function bindPointer(){const pts=new Map();let start=null,moved=false,painting=f
  canvas.addEventListener('pointerleave',()=>{preview=null;});
  canvas.addEventListener('wheel',e=>{e.preventDefault();const z=Math.max(0.18,Math.min(2.6,cam.z*(e.deltaY<0?1.12:1/1.12)));cam.x=e.clientX-(e.clientX-cam.x)*z/cam.z;cam.y=e.clientY-(e.clientY-cam.y)*z/cam.z;cam.z=z;},{passive:false});}
 
+// ---------- Einführung für neue Spieler ----------
+const TUT=[
+ {text:'👋 Willkommen, Bürgermeisterin oder Bürgermeister! Ich zeige dir in ein paar Schritten, wie du deine Stadt baust.',btn:'Los geht’s'},
+ {text:'🛣️ Tippe unten auf <b>Straße</b> und zieh mit dem Finger eine Straße – mindestens 5 Felder.',group:'road',done:(g,b)=>(g.stats.road||0)-(b.road||0)>=5},
+ {text:'🏡 Tippe auf <b>Zonen</b> → <b>Wohnen</b> und leg 3 Wohngebiete direkt an die Straße.',group:'zones',done:(g,b)=>(g.stats.zone||0)-(b.zone||0)>=3},
+ {text:'🚧 Super! Gleich ziehen Leute ein. Warte einen kleinen Moment …',done:(g,b)=>(g.stats.built_house||0)-(b.built_house||0)>=2},
+ {text:'⬆️ Tippe unten auf <b>Info</b> und dann auf ein Haus. Mit <b>Ausbauen</b> wird es größer und mehr Leute wohnen dort.',group:'hand',done:(g,b)=>(g.stats.upgrade||0)-(b.upgrade||0)>=1},
+ {text:'⚡ Mit mehr Einwohnern steigst du im Level auf und bekommst neue Gebäude – zum Beispiel Läden, Kraftwerk und Fabriken. Sprechblasen über den Häusern zeigen, was fehlt.',btn:'Verstanden'},
+ {text:'🪙 Oben links ist deine Stadtkasse (antippen für Steuern und Handel). Rechts siehst du 😊 Zufriedenheit und 📋 Aufträge mit Belohnungen. Viel Spaß – hier sind 1.000 Taler Startgeld obendrauf!',btn:'Fertig 🎉',last:true}];
+function tutShow(){let b=$('#tut');const T=game?.tut;document.querySelectorAll('.pulse').forEach(e=>e.classList.remove('pulse'));
+ document.body.classList.toggle('hastut',!!(T&&!T.done&&T.step<TUT.length));if(!T||T.done||T.step>=TUT.length){b?.remove();return;}const S=TUT[T.step];if(!b){b=document.createElement('div');b.id='tut';document.body.appendChild(b);}
+ b.innerHTML=`<div class="tstep">Einführung ${T.step+1}/${TUT.length}</div><p>${S.text}</p><div class="tbtn">${S.btn?`<button data-tutnext>${S.btn}</button>`:''}<button class="link" data-tutskip>Überspringen</button></div>`;
+ if(S.group)document.querySelector(`[data-group="${S.group}"]`)?.classList.add('pulse');}
+function tutAdvance(){const T=game.tut;if(TUT[T.step]?.last){game.money+=1000;game.tut={done:true};save();sfx('coin');hud();toast('🎓 Einführung geschafft! +1.000 Taler','gold');return tutShow();}
+ game.tut={step:T.step+1,base:{...game.stats}};save();sfx('click');tutShow();}
+function tutCheck(){const T=game?.tut;if(!T||T.done)return;const S=TUT[T.step];if(S?.done&&S.done(game,T.base||{})){sfx('coin');tutAdvance();}}
+
 // ---------- Aufträge und Ereignisse ----------
 function tasks(){const p=$('#panel');delete p.dataset.modal;sel=null;
  p.innerHTML=`<button class="close" data-close aria-label="Schließen">✕</button><h3>📋 Aufträge vom Bürgermeister-Büro</h3>
@@ -136,7 +158,7 @@ function tasks(){const p=$('#panel');delete p.dataset.modal;sel=null;
    <span class="lvbar wide"><i style="width:${Math.min(100,pr.have/pr.need*100)}%"></i></span><small>${fmt(Math.max(0,pr.have))} / ${fmt(pr.need)} · Belohnung ${fmt(t.reward)} Taler</small></div>
    ${done?`<button data-claim="${t.id}">Abholen</button>`:`<button class="link" data-skip="${t.id}" title="Anderen Auftrag">↻</button>`}</div>`;}).join('')}</div>
   <p class="muted small">Erledigte Aufträge bringen Taler. Mit ↻ tauschst du einen Auftrag gegen einen anderen.</p>`;p.classList.remove('hidden');}
-function eventsModal(){const ev=game.events||[];if(!ev.length||$('#panel').dataset.modal||(game.levelUps||[]).length)return;const e=ev[ev.length-1];
+function eventsModal(){const ev=game.events||[];if(!ev.length||$('#panel').dataset.modal||(game.levelUps||[]).length)return;sfx('event');const e=ev[ev.length-1];
  const r=act(game,{type:'seenEvents'},Date.now());game=r.game;save();const p=$('#panel');p.dataset.modal='1';sel=null;
  p.innerHTML=`<div class="lvup"><div class="big-emo">${e.icon}</div><h3>${esc(e.title)}</h3><p>${esc(e.text)}</p><p><b>+${fmt(e.money)} Taler</b></p><button class="big" data-close>Super!</button></div>`;p.classList.remove('hidden');}
 
@@ -171,24 +193,32 @@ function settings(){const p=$('#panel');delete p.dataset.modal;const n=counts(ga
   <label class="field"><span>Name der Stadt</span><span class="inline"><input id="cityname" maxlength="30" value="${esc(game.city.name)}"><button data-rename>Speichern</button></span></label>
   <p>⭐ Attraktivität ${fmt(attractiveness(game))} · 🧳 Tourismus +${fmt(tourism(game))} Taler/Min. · 💼 ${fmt(jobs(game))} Arbeitsplätze</p><p class="muted">🏠 ${Object.entries(n).filter(([k])=>k.startsWith('house')).reduce((a,[,v])=>a+v,0)} Häuser · 🛣️ ${n.road||0} Straßenfelder · 🌳 ${n.park||0} Parks</p>
   <p class="links"><a href="datenschutz.html">Datenschutz</a> · <a href="https://mentaro-online.app/impressum" target="_blank" rel="noopener">Impressum</a></p>
+  <div class="toggles"><button class="${audio.sound?'on':''}" data-aud="sound">🔊 Töne</button><button class="${audio.music?'on':''}" data-aud="music">🎵 Musik</button><button class="${audio.daynight?'on':''}" data-aud="daynight">🌙 Tag und Nacht</button></div>
+  <button class="wideb" data-tutagain>🎓 Einführung noch einmal zeigen</button>
   <button class="danger" data-reset>Neue Stadt gründen</button><p class="muted small">Version ${BUILD}</p>`;p.classList.remove('hidden');}
 
 document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b||!game)return;const d=b.dataset;
- if(d.group){group=d.group;const ts=TOOLS.filter(t=>t.group===group);if(ts.length===1){cur=ts[0].id;if(cur!=='hand'){sel=null;panel();toast(cur==='bulldoze'?'Tippe auf etwas, das weg soll.':cur==='land'?(unlocked(game,'land')?'Tippe auf ein gelb markiertes Gebiet, um es zu kaufen.':`Land kaufen geht ab Stadt-Level ${LAND_LEVEL}.`):'Tippe oder ziehe mit dem Finger, um Straßen zu bauen.');}}else if(!ts.some(t=>t.id===cur))cur='hand';preview=null;return toolbar();}
+ if(d.group){group=d.group;const ts=TOOLS.filter(t=>t.group===group);if(ts.length===1){cur=ts[0].id;if(cur!=='hand'){sel=null;panel();toast(cur==='bulldoze'?'Tippe auf etwas, das weg soll.':cur==='land'?(unlocked(game,'land')?'Tippe auf ein gelb markiertes Gebiet, um es zu kaufen.':`Land kaufen geht ab Stadt-Level ${LAND_LEVEL}.`):'Tippe oder ziehe mit dem Finger, um Straßen zu bauen.');}}else if(!ts.some(t=>t.id===cur)){const first=ts.find(t=>unlocked(game,t.id)&&!(t.once&&built(game,t.id)));cur=first?first.id:'hand';if(first){sel=null;panel();}}preview=null;return toolbar();}
  if(d.tool){if(!unlocked(game,d.tool)){const t=tool(d.tool);return toast(`${t.icon} ${t.name} gibt es ab Stadt-Level ${t.lvl}. Lass deine Stadt weiter wachsen!`);}cur=d.tool;preview=null;toolbar();if(cur!=='hand'){sel=null;panel();const t=tool(cur);toast(t.feature?`${t.icon} ${t.name} geht nur in Gebieten mit ${FEATURES[t.feature].icon} ${FEATURES[t.feature].name}. Schau unter „Land“, wo es die gibt.`:cur==='land'?'Tippe auf ein Gebiet: Die Symbole zeigen Strand, Berge, Wald, Öl und Goldadern.':cur==='lanes'?'Tippe oder ziehe über Straßen. Rot = Stau.':t.onRock?`${t.icon} ${t.name} geht nur auf Fels (graue Berge in den Außengebieten).`:t.size>1?`${t.icon} ${t.name} braucht ${t.size}×${t.size} freie Felder. Tippe auf die Mitte.`:t.once&&built(game,t.id)?`${t.name} gibt es nur einmal.`:cur==='zone'?'Lege Wohngebiete direkt an eine Straße.':cur==='zonec'?'Lege Läden an eine Straße – sie bringen Arbeitsplätze.':cur==='zonei'?'Fabriken brauchen Straße und Strom – und bringen viele Arbeitsplätze.':t.radius?`${t.name}: versorgt alles im Umkreis von ${t.radius} Feldern.`:`${t.icon} ${t.name}: Tippe auf einen freien Platz.`);}return;}
  if('close'in d){sel=null;delete $('#panel').dataset.modal;return panel();}
- if('upgrade'in d){const r=act(game,{type:'upgrade',x:sel.x,y:sel.y},Date.now());if(r.error)return toast(r.error,'err');game=r.game;save();toast(r.message,'gold');hud();panel();return levelUps();}
+ if('upgrade'in d){const r=act(game,{type:'upgrade',x:sel.x,y:sel.y},Date.now());if(r.error){sfx('error');return toast(r.error,'err');}game=r.game;save();sfx('upgrade');toast(r.message,'gold');tutCheck();hud();panel();return levelUps();}
  if('needs'in d){showNeeds=!showNeeds;hud();return settings();}
  if('finance'in d)return finance();
  if('dirt'in d){showDirt=!showDirt;return finance();}
- if('settings'in d)return settings();
+ if('settings'in d){sfx('click');return settings();}
+ if(d.aud){audio[d.aud]=!audio[d.aud];saveSettings();if(d.aud==='music'){audio.music?startMusic():stopMusic();}hud();return settings();}
+ if('sky'in d){const now=Date.now(),dn=clock(now);return toast(`${SEASONS[season(now)].icon} ${SEASONS[season(now)].name} · ${WEATHER[sky(now)].icon} ${WEATHER[sky(now)].name} · ${audio.daynight?(dn.night>0.5?'🌙 ':'☀️ ')+dn.label:'immer Tag'}`);}
+ if('tutagain'in d){game.tut={step:0,base:{...game.stats}};save();$('#panel').classList.add('hidden');return tutShow();}
+ if('tutnext'in d){tutAdvance();return;}
+ if('tutskip'in d){game.tut={done:true};save();return tutShow();}
  if('tasks'in d)return tasks();
- if(d.claim){const r=act(game,{type:'claimTask',id:+d.claim},Date.now());if(r.error)return toast(r.error,'err');game=r.game;save();toast(r.message,'gold');hud();return tasks();}
+ if(d.claim){const r=act(game,{type:'claimTask',id:+d.claim},Date.now());if(r.error)return toast(r.error,'err');game=r.game;save();sfx('coin');toast(r.message,'gold');hud();return tasks();}
  if(d.skip){const r=act(game,{type:'skipTask',id:+d.skip},Date.now());game=r.game;save();return tasks();}
  if('trade'in d)return tradePanel();
  if('traffic'in d){showTraffic=!showTraffic;return finance();}
- if(d.buyland){const[sx,sy]=d.buyland.split(',').map(Number);const r=act(game,{type:'buyLand',sx,sy},Date.now());if(r.error)return toast(r.error,'err');game=r.game;save();toast(r.message,'gold');hud();toolbar();sel=null;return panel();}
+ if(d.buyland){const[sx,sy]=d.buyland.split(',').map(Number);const r=act(game,{type:'buyLand',sx,sy},Date.now());if(r.error)return toast(r.error,'err');sfx('coin');game=r.game;save();toast(r.message,'gold');hud();toolbar();sel=null;return panel();}
  if('rename'in d){const r=act(game,{type:'renameCity',name:$('#cityname').value},Date.now());if(r.error)return toast(r.error,'err');game=r.game;save();toast(r.message);hud();return settings();}
  if('reset'in d){if(confirm(`Wirklich eine neue Stadt gründen? ${game.city.name} wird gelöscht.`)){localStorage.removeItem(SAVE_KEY);game=null;canvas=null;renderStart();}}});
 
+document.addEventListener('pointerdown',()=>unlock(),{once:true});
 game=load();if(game){game=update(game,Date.now());startCity();}else renderStart();checkUpdate();
