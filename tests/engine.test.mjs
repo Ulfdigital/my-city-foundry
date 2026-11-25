@@ -198,3 +198,7 @@ test('Karte drehen: Tippen trifft in jeder Drehung das richtige Feld',async()=>{
   assert.deepEqual(R.screenToCell(cam,400,600/2),{x,y},`Drehung ${r}, Feld ${x},${y}`);
   for(const[dx,dy]of[[8,0],[-8,0],[0,5],[0,-5]])assert.deepEqual(R.screenToCell(cam,400+dx,300+dy),{x,y},'auch etwas neben der Mitte');}}
  R.setRotation(0);});
+test('Drehen mit zwei Fingern: die Stelle zwischen den Fingern bleibt, wo sie ist',async()=>{const R=await import('../js/render.mjs');
+ const cam={x:-1234,y:-567,z:1.7};R.setRotation(0);const sx=310,sy=455,p=R.screenToPoint(cam,sx,sy);
+ for(const k of[1,1,-1,2,1]){R.setRotation(R.getRotation()+k);R.pinTo(cam,p,sx,sy);const q=R.screenToPoint(cam,sx,sy);assert.ok(Math.abs(q[0]-p[0])<1e-6&&Math.abs(q[1]-p[1])<1e-6,`Drehung ${R.getRotation()}`);}
+ R.setRotation(0);});

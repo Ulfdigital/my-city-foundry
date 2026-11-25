@@ -25,6 +25,10 @@ const rvec=(dx,dy)=>ROT===0?[dx,dy]:ROT===1?[-dy,dx]:ROT===2?[-dx,-dy]:[dy,-dx];
 const wvec=(du,dv)=>ROT===0?[du,dv]:ROT===1?[dv,-du]:ROT===2?[-du,-dv]:[-dv,du];          // Richtung Ansicht → Welt
 export const cellTop=(x,y)=>{const[u,v]=vpt(x,y);return{x:(u-v)*TW/2,y:(u+v)*TH/2};};
 export function screenToCell(cam,sx,sy){const wx=(sx-cam.x)/cam.z,wy=(sy-cam.y)/cam.z,u=wx/(TW/2),v=wy/(TH/2),[x,y]=wpt((v+u)/2,(v-u)/2);return{x:Math.floor(x),y:Math.floor(y)};}
+// Bildschirmpunkt → genaue Kartenstelle (mit Komma), für Drehen um die Finger
+export function screenToPoint(cam,sx,sy){const wx=(sx-cam.x)/cam.z,wy=(sy-cam.y)/cam.z,u=wx/(TW/2),v=wy/(TH/2);return wpt((v+u)/2,(v-u)/2);}
+// Kamera so setzen, dass die Kartenstelle p genau am Bildschirmpunkt (sx, sy) liegt
+export function pinTo(cam,p,sx,sy){const q=cellTop(p[0],p[1]);cam.x=sx-q.x*cam.z;cam.y=sy-q.y*cam.z;}
 export function centerOn(cam,x,y,w,h){const p=cellTop(x+0.5,y+0.5);cam.x=w/2-p.x*cam.z;cam.y=h/2-p.y*cam.z;}
 
 const hash=(x,y)=>{let h=(x*73856093)^(y*19349663);h=(h^(h>>>13))*1274126177;return((h^(h>>>16))>>>0)/4294967296;};
@@ -436,10 +440,12 @@ function bubble(ctx,cx,cy,text,bg){ctx.fillStyle=bg;ctx.strokeStyle='rgba(0,0,0,
  ctx.font='11px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#222';ctx.fillText(text,cx,cy+0.5);ctx.textBaseline='alphabetic';}
 const HEIGHT={house:[0,30,38,40,60,104,170,270],shop:[0,22,30,46,70,120,200],factory:[0,24,48,74,64,52]};
 
-export function draw(ctx,g,cam,{w,h,dpr,sel,preview,t,showNeeds,money,dirt,traffic,land,bg=true,area,env,ghost}){const V=info(g);TRUCKS=V.cap>0;SEASON=env?.season||'summer';NIGHT=env?.night||0;LIGHTS=false;ZOOM=cam.z;const vis=[];
+export function draw(ctx,g,cam,{w,h,dpr,sel,preview,t,showNeeds,money,dirt,traffic,land,bg=true,area,env,ghost,spin}){const V=info(g);TRUCKS=V.cap>0;SEASON=env?.season||'summer';NIGHT=env?.night||0;LIGHTS=false;ZOOM=cam.z;const vis=[];
  ctx.setTransform(dpr,0,0,dpr,0,0);if(bg){ctx.fillStyle='#5f9d4b';ctx.fillRect(0,0,w,h);}
- ctx.setTransform(dpr*cam.z,0,0,dpr*cam.z,dpr*cam.x,dpr*cam.y);
- const pad=200;ctx0=ctx;NET=railNet(g);CARS=trainCars(g,NET,t);const cells=[];
+ // spin: Karte wird gerade mit zwei Fingern gedreht (Winkel a um den Punkt px, py zwischen den Fingern)
+ const sa=spin?.a||0,co=Math.cos(sa),si=Math.sin(sa),px=spin?.px||0,py=spin?.py||0;
+ ctx.setTransform(dpr*co*cam.z,dpr*si*cam.z,-dpr*si*cam.z,dpr*co*cam.z,dpr*(co*(cam.x-px)-si*(cam.y-py)+px),dpr*(si*(cam.x-px)+co*(cam.y-py)+py));
+ const pad=sa?Math.max(w,h)*0.6:200;ctx0=ctx;NET=railNet(g);CARS=trainCars(g,NET,t);const cells=[];
  for(let d=0;d<MAP_W+MAP_H-1;d++)for(let u=Math.max(0,d-MAP_H+1);u<=Math.min(d,MAP_W-1);u++){const q=wpt(u+0.5,d-u+0.5),x=Math.floor(q[0]),y=Math.floor(q[1]),p=cellTop(x+0.5,y+0.5),cx=p.x,cy=p.y;
   const sx=cx*cam.z+cam.x,sy=cy*cam.z+cam.y;if(sx<-pad||sx>w+pad||sy<-pad||sy>h+pad*2)continue;if(area&&(x<area[0]||y<area[1]||x>area[2]||y>area[3]))continue;cells.push([x,y,cx,cy]);}
  // 1. Durchgang: flacher Boden (Gras, Straßen, Gleise, Markierungen) – so verdeckt nichts Flaches einen Zug oder ein Haus

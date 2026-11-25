@@ -1,7 +1,7 @@
 // My City Foundry – Oberfläche: Karte zum Verschieben/Zoomen, Werkzeugleiste, Infofenster. Speichert automatisch auf dem Gerät.
 import {SAVE_KEY,TOOLS,GROUPS,tool,LEVELS,MAX_LEVEL,NEEDS,TREE_CLEAR,citySize,MAP_W,MAP_H,BIZ,bizMax,BUILD,levelPop,MAX_CITY_LEVEL,TAX_MIN,TAX_MAX,TAX_DEFAULT,happyText,happyIcon,HAPPY_MIN,SECTOR,ROAD_LANES,LAND_LEVEL,FEATURES,GOODS,NEIGHBORS,TRADE_PRICE,LOCAL_PRICE,WANTED_BONUS} from './data.mjs';
 import {newGame,act,update,restore,tile,population,incomePerMin,missing,has,hasRoad,counts,cityLevel,nextLevelPop,unlocked,demand,jobs,maxLevel,upgradeCost,attractiveness,tourism,built,canPlace,happiness,mood,finances,taxRate,covered,owns,canBuy,sectorPrice,jam,taskProgress,taskDone,features,trade,wanted,nextWantedChange,ACHIEVEMENTS,shopNeededHere} from './engine.mjs';
-import {draw,screenToCell,centerOn,cellTop,setRotation,getRotation,TW,TH,dayNight,season,weather,SEASONS,WEATHER} from './render.mjs';
+import {draw,screenToCell,screenToPoint,pinTo,centerOn,cellTop,setRotation,getRotation,TW,TH,dayNight,season,weather,SEASONS,WEATHER} from './render.mjs';
 import {sfx,unlock,settings as audio,saveSettings,startMusic,stopMusic,setMusicMood} from './sound.mjs';
 
 const $=s=>document.querySelector(s);
@@ -81,8 +81,11 @@ function savePanel(){const p=$('#panel');delete p.dataset.modal;sel=null;
   <textarea id="impcode" rows="3" placeholder="MCF1:…"></textarea><button class="wideb" data-imp>Spielstand laden</button>`;p.classList.remove('hidden');}
 
 // Karte drehen: um die Bildschirmmitte, in 90°-Schritten; die Drehung merkt sich das Gerät (nicht im Spielstand)
-function rotate(k){const c=screenToCell(cam,W/2,Hh/2);setRotation(getRotation()+k);try{localStorage.setItem(ROT_KEY,String(getRotation()));}catch{}centerOn(cam,c.x,c.y,W,Hh);sfx('click');}
-function fab(){const f=$('#fab');if(f)f.innerHTML=`<button data-mini title="Übersichtskarte" aria-label="Übersichtskarte">🧭</button><button data-rot="1" title="Karte nach rechts drehen" aria-label="Karte nach rechts drehen">↻</button><button data-rot="-1" title="Karte nach links drehen" aria-label="Karte nach links drehen">↺</button>${undoStack.length?'<button data-undo title="Rückgängig" aria-label="Rückgängig">↩️</button>':''}`;}
+// Karte um eine Vierteldrehung drehen; die Stelle am Punkt (sx, sy) bleibt genau dort
+function rotate(k,sx=W/2,sy=Hh/2){const p=screenToPoint(cam,sx,sy);setRotation(getRotation()+k);try{localStorage.setItem(ROT_KEY,String(getRotation()));}catch{}pinTo(cam,p,sx,sy);}
+let spin=null;   // sichtbare Drehung während der Fingerbewegung: {a, px, py}
+function settleSpin(){if(!spin)return;const s0=spin.a,t0=performance.now();const step=()=>{if(!spin)return;const q=Math.min(1,(performance.now()-t0)/180);spin.a=s0*(1-q)*(1-q);if(q<1)requestAnimationFrame(step);else spin=null;};requestAnimationFrame(step);}
+function fab(){const f=$('#fab');if(f)f.innerHTML=`<button data-mini title="Übersichtskarte" aria-label="Übersichtskarte">🧭</button>${undoStack.length?'<button data-undo title="Rückgängig" aria-label="Rückgängig">↩️</button>':''}`;}
 function envIcon(){const now=Date.now(),dn=clock(now),w=sky(now);return`${audio.daynight&&dn.night>0.5?'🌙':WEATHER[w].icon}<small>${SEASONS[season(now)].icon}</small>`;}
 function toolbar(){setTimeout(()=>{const S=TUT[game?.tut?.step];if(game?.tut&&!game.tut.done&&S?.group)document.querySelector(`[data-group="${S.group}"]`)?.classList.add('pulse');},0);const lv=cityLevel(game);
  $('#tools').innerHTML=GROUPS.map(G=>{const ts=TOOLS.filter(t=>t.group===G.id),open=ts.some(t=>unlocked(game,t.id)),fresh=ts.filter(t=>unlocked(game,t.id)&&!built(game,t.id)&&t.lvl>1&&t.lvl>=lv-1).length;
@@ -91,7 +94,7 @@ function toolbar(){setTimeout(()=>{const S=TUT[game?.tut?.step];if(game?.tut&&!g
  if(ts.length>1){sub.innerHTML=ts.map(t=>{const o=unlocked(game,t.id),done=t.once&&built(game,t.id);return`<button class="${cur===t.id?'on':''} ${o&&!done?'':'locked'}" data-tool="${t.id}"><span>${o?t.icon:'🔒'}</span>${t.name}<small>${!o?'ab Level '+t.lvl:done?'gebaut':t.id==='lanes'?'mehr Spuren':t.id==='land'?fmt(sectorPrice(game)):fmt(t.cost)+(t.size>1?` · ${t.size}×${t.size}`:'')}</small></button>`;}).join('');sub.classList.remove('hidden');}
  else sub.classList.add('hidden');}
 
-function loop(t){if(!game||!canvas)return;{const s=size();if(s.w!==W||s.h!==Hh||s.d!==dpr)resize();}const now=Date.now(),dn=audio.daynight?clock(now):{night:0,dusk:false};draw(ctx,game,cam,{env:{night:dn.night,dusk:dn.dusk,season:season(now),weather:sky(now)},w:W,h:Hh,dpr,sel,preview,t,showNeeds,money:game.money,dirt:showDirt||['zone','zonei','power','airport'].includes(cur),traffic:showTraffic||cur==='lanes',land:cur==='land',ghost:['road','lanes','rail'].includes(cur)});requestAnimationFrame(loop);}
+function loop(t){if(!game||!canvas)return;{const s=size();if(s.w!==W||s.h!==Hh||s.d!==dpr)resize();}const now=Date.now(),dn=audio.daynight?clock(now):{night:0,dusk:false};draw(ctx,game,cam,{env:{night:dn.night,dusk:dn.dusk,season:season(now),weather:sky(now)},w:W,h:Hh,dpr,sel,preview,t,showNeeds,money:game.money,dirt:showDirt||['zone','zonei','power','airport'].includes(cur),traffic:showTraffic||cur==='lanes',land:cur==='land',ghost:['road','lanes','rail'].includes(cur),spin});requestAnimationFrame(loop);}
 setInterval(()=>{if(!game||!canvas)return;const before=population(game),bj=jobs(game);game=update(game,Date.now());const p=population(game);
  if(p>before)toast('Neue Einwohner sind eingezogen! 🏡');else if(jobs(game)>bj)toast('Neue Arbeitsplätze in der Stadt! 💼');hud();levelUps();eventsModal();achvToasts();tutCheck();setMusicMood(audio.daynight&&clock(Date.now()).night>0.5);if(sel&&!$('#panel').dataset.modal)panel();},1000);
 setInterval(()=>{if(game)save();},5000);
@@ -171,22 +174,28 @@ setInterval(checkUpdate,10*60*1000);
 function bindPointer(){const pts=new Map();let start=null,moved=false,painting=false,last=null,pinch=null;
  const pos=e=>({x:e.clientX,y:e.clientY});
  canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture(e.pointerId);pts.set(e.pointerId,pos(e));
-  if(pts.size===2){painting=false;const[a,b]=[...pts.values()];pinch={d:Math.hypot(a.x-b.x,a.y-b.y),m:{x:(a.x+b.x)/2,y:(a.y+b.y)/2},z:cam.z,cx:cam.x,cy:cam.y};return;}
+  if(pts.size===2){painting=false;const[a,b]=[...pts.values()];pinch={d:Math.hypot(a.x-b.x,a.y-b.y),m:{x:(a.x+b.x)/2,y:(a.y+b.y)/2},ang:Math.atan2(b.y-a.y,b.x-a.x),turn:0,steps:0};spin=null;moved=true;return;}
   start={...pos(e),cx:cam.x,cy:cam.y};moved=false;last=null;
   if(cur!=='hand'){painting=true;stroke={prev:game,pushed:false};const c=screenToCell(cam,e.clientX,e.clientY);last=c;apply(c.x,c.y,false);}});
  canvas.addEventListener('pointermove',e=>{
   if(!pts.has(e.pointerId)){if(cur!=='hand'&&e.pointerType==='mouse'){const c=screenToCell(cam,e.clientX,e.clientY),a=anchor(c.x,c.y);const t=tile(game,c.x,c.y);preview=t?{x:a.x,y:a.y,n:a.n,ok:cur==='bulldoze'?t.t!=='water'&&t.t!=='grass':cur==='rail'?(t.t==='grass'||t.t==='tree'||t.t==='rock'||(t.t==='road'&&(t.lanes||1)===1)):cur==='road'||cur.startsWith('zone')?(t.t==='grass'||t.t==='tree'):canPlace(game,cur,a.x,a.y).ok}:null;}return;}
   pts.set(e.pointerId,pos(e));
-  if(pts.size===2&&pinch){const[a,b]=[...pts.values()],d=Math.hypot(a.x-b.x,a.y-b.y),m={x:(a.x+b.x)/2,y:(a.y+b.y)/2};
-   const z=Math.max(0.18,Math.min(2.6,pinch.z*d/pinch.d));cam.z=z;cam.x=m.x-(pinch.m.x-pinch.cx)*z/pinch.z;cam.y=m.y-(pinch.m.y-pinch.cy)*z/pinch.z;return;}
+  if(pts.size===2&&pinch){const[a,b]=[...pts.values()],d=Math.hypot(a.x-b.x,a.y-b.y),m={x:(a.x+b.x)/2,y:(a.y+b.y)/2},ang=Math.atan2(b.y-a.y,b.x-a.x);
+   // Verschieben und Zoomen: die Stelle zwischen den Fingern wandert mit den Fingern
+   const p=screenToPoint(cam,pinch.m.x,pinch.m.y);cam.z=Math.max(0.18,Math.min(2.6,cam.z*d/pinch.d));pinTo(cam,p,m.x,m.y);
+   // Drehen: Fingerdrehung aufsummieren; ab 45° rastet die Karte um 90° ein – um die Stelle zwischen den Fingern
+   let da=ang-pinch.ang;if(da>Math.PI)da-=2*Math.PI;if(da<-Math.PI)da+=2*Math.PI;pinch.turn+=da;
+   const Q=Math.PI/2;while(pinch.turn-pinch.steps*Q>Q/2){pinch.steps++;rotate(1,m.x,m.y);}while(pinch.turn-pinch.steps*Q<-Q/2){pinch.steps--;rotate(-1,m.x,m.y);}
+   spin={a:pinch.turn-pinch.steps*Q,px:m.x,py:m.y};pinch.d=d;pinch.m=m;pinch.ang=ang;return;}
   if(!start)return;const dx=e.clientX-start.x,dy=e.clientY-start.y;if(Math.hypot(dx,dy)>6)moved=true;
   if(painting){const c=screenToCell(cam,e.clientX,e.clientY);if(last&&(c.x!==last.x||c.y!==last.y)){line(last,c,(x,y)=>{if(x!==last.x||y!==last.y)apply(x,y,true);});last=c;}}
   else if(moved){cam.x=start.cx+dx;cam.y=start.cy+dy;}});
- const end=e=>{pts.delete(e.pointerId);if(pts.size<2)pinch=null;
+ const end=e=>{pts.delete(e.pointerId);if(pts.size<2&&pinch){pinch=null;settleSpin();if(pts.size===1){const q=[...pts.values()][0];start={...q,cx:cam.x,cy:cam.y};moved=true;}}
   if(pts.size===0){if(cur==='hand'&&start&&!moved){const c=screenToCell(cam,e.clientX,e.clientY);sel=tile(game,c.x,c.y)?c:null;panel();}
    if(painting)save();painting=false;stroke=null;start=null;}};
  canvas.addEventListener('pointerup',end);canvas.addEventListener('pointercancel',end);
  canvas.addEventListener('pointerleave',()=>{preview=null;});
+ addEventListener('keydown',e=>{if(e.target.closest?.('input,textarea'))return;if(e.key==='q'||e.key==='Q')rotate(-1);if(e.key==='e'||e.key==='E')rotate(1);});   // Computer: Q/E drehen
  canvas.addEventListener('wheel',e=>{e.preventDefault();const z=Math.max(0.18,Math.min(2.6,cam.z*(e.deltaY<0?1.12:1/1.12)));cam.x=e.clientX-(e.clientX-cam.x)*z/cam.z;cam.y=e.clientY-(e.clientY-cam.y)*z/cam.z;cam.z=z;},{passive:false});}
 
 // ---------- Erfolge ----------
@@ -274,7 +283,6 @@ document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b||
  if('settings'in d){sfx('click');return settings();}
  if('undo'in d)return undo();
  if('mini'in d){sfx('click');return miniPanel();}
- if('rot'in d)return rotate(+d.rot);
  if(d.aud){audio[d.aud]=!audio[d.aud];saveSettings();if(d.aud==='music'){audio.music?startMusic():stopMusic();}hud();return settings();}
  if('sky'in d){const now=Date.now(),dn=clock(now);return toast(`${SEASONS[season(now)].icon} ${SEASONS[season(now)].name} · ${WEATHER[sky(now)].icon} ${WEATHER[sky(now)].name} · ${audio.daynight?(dn.night>0.5?'🌙 ':'☀️ ')+dn.label:'immer Tag'}`);}
  if(d.ttab){taskTab=d.ttab;return tasks();}
