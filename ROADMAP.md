@@ -9,4 +9,6 @@
 | 0.5 | Welt 128×128 mit 64 Gebieten (Mitte gehört dir, Rest ab Level 12 kaufen), Berge mit Bergbau (Steinbruch, Kohle-, Erz-, Goldmine), Dorfplatz für Dörfer, Verkehr mit Autos und Stau, Straßen ausbauen (2 Spuren, 3 Spuren, Stadtautobahn), U-Bahn, 100 Level, Megaturm (Stufe 7), Konzernzentrale, Hightech-Park, neue Sondergebäude (Dom, Aquarium, Botanischer Garten, Filmstudio, Opernhaus, Aussichtsturm, Kreuzfahrthafen, Großflughafen, Olympiastadion, Weltraumbahnhof), Bürgermeister-Aufträge, Ereignisse | **fertig** |
 | 0.5.1 | App für iPhone/iPad (lädt die Website, Offline-Fassung, Spielstand gespiegelt), App-Symbol, Xcode-Paket für TestFlight | **fertig** |
 | 0.6 | Käufe mit Altersabfrage und Elternsperre (wenn gewünscht) | später |
-| 0.7 | Nachbarstädte und Handel, Wetter und Jahreszeiten, Erfolge | Idee |
+| 0.6.x | Karte über den ganzen Bildschirm (Ulf), echte Autos mit Ampeln an Kreuzungen, Schutz vor Dauer-Neuladen | **fertig** |
+| 0.7 | Besondere Gebiete (Strand, Berge, Wald, Öl, Goldader – vor dem Kauf sichtbar) mit Strandbad, Strandhotel, Naturpark, Seilbahn, Skigebiet, Ölbohrturm; Waren aus Fabriken und Minen; Handel mit 4 Nachbarstädten (wechselnde Wunschwaren +60 %), Speditionshof, Güterbahnhof, Hafen und Großflughafen als Transport; Lieferwagen auf den Straßen | **fertig** |
+| 0.8 | Tag und Nacht, Jahreszeiten, Wetter; Erfolge und Stadtwappen; Fußgänger, Züge, Boote | Idee |

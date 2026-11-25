@@ -138,3 +138,26 @@ test('Umwelt: neben Fabriken wachsen keine großen Häuser; Dreck macht unzufrie
  assert.ok(missing(g,h.x,h.y,4).includes('clean'));const hp=happiness(g);
  g.tiles[(s.y+1)*MAP_W+s.x-1]={t:'grass'};g.rev++;assert.ok(!missing(g,h.x,h.y,4).includes('clean'));assert.ok(happiness(g)>=hp);
  g.tax=20;g.rev++;if(happiness(g)<HAPPY_MIN)assert.ok(missing(g,h.x,h.y,4).includes('happy'));});
+
+import {features,hasFeature,trade,wanted,sectorOf} from '../js/engine.mjs';
+import {FEATURES,SECTOR as SEC,TRADE_PRICE,LOCAL_PRICE,WANTED_BONUS} from '../js/data.mjs';
+test('Besondere Gebiete: Strand, Berge, Wald, Öl, Goldader – Gebäude nur dort',()=>{
+ let g=newGame(T0,{},42);g.level=60;g.money=1e8;g.land=g.land.map(()=>1);g.rev++;
+ const all=[];for(let sy=0;sy<8;sy++)for(let sx=0;sx<8;sx++)all.push({sx,sy,f:features(g,sx,sy)});
+ for(const k of ['beach','mountain','forest'])assert.ok(all.some(a=>a.f.includes(k)),'es gibt '+k);assert.ok(all.some(a=>a.f.includes('oil')||a.f.includes('goldvein')),'Schätze');
+ const noForest=all.find(a=>!a.f.includes('forest'));let spot=null;for(let y=noForest.sy*SEC;y<noForest.sy*SEC+13&&!spot;y++)for(let x=noForest.sx*SEC;x<noForest.sx*SEC+13;x++){let ok2=true;for(let j=0;j<3;j++)for(let i=0;i<3;i++)if(!['grass','tree'].includes(tile(g,x+i,y+j).t))ok2=false;if(ok2){spot={x,y};break;}}
+ if(spot)assert.match(bad(g,{type:'build',tool:'naturepark',...spot}),/Wald/);
+ const forest=all.find(a=>a.f.includes('forest'));let fs=null;for(let y=forest.sy*SEC;y<forest.sy*SEC+13&&!fs;y++)for(let x=forest.sx*SEC;x<forest.sx*SEC+13;x++){let ok2=true;for(let j=0;j<3;j++)for(let i=0;i<3;i++)if(!['grass','tree'].includes(tile(g,x+i,y+j).t))ok2=false;if(ok2){fs={x,y};break;}}
+ if(fs){const m=g.money;g=ok(g,{type:'build',tool:'naturepark',...fs});assert.equal(m-g.money,tool('naturepark').cost,'Bäume bleiben stehen, kein Fällen');}
+ const oilS=all.find(a=>a.f.includes('oil'));if(oilS){let o=null;for(let y=oilS.sy*SEC;y<oilS.sy*SEC+16&&!o;y++)for(let x=oilS.sx*SEC;x<oilS.sx*SEC+16;x++)if(['grass','tree','rock'].includes(tile(g,x,y).t)){o={x,y};break;}g=ok(g,{type:'build',tool:'oil',...o});assert.ok(trade(g).list.some(l=>l.id==='oil'));}});
+
+test('Goldader: Minen bringen dort das Doppelte',()=>{
+ let g=newGame(T0,{},42);g.level=60;g.land=g.land.map(()=>1);const x0=2,y0=2;for(let y=y0;y<y0+2;y++)for(let x=x0;x<x0+2;x++)g.tiles[y*MAP_W+x]={t:'rock'};
+ g.secrets[sectorOf(x0,y0)]=null;g.rev++;g.money=1e8;g=ok(g,{type:'build',tool:'coal',x:x0,y:y0});const normal=info(g).prod;
+ g.secrets[sectorOf(x0,y0)]='goldvein';g.rev++;assert.equal(info(g).prod,normal*2);assert.ok(hasFeature(g,x0,y0,'goldvein'));});
+
+test('Handel: Anschluss verkauft teurer an Nachbarn, gesuchte Ware noch mehr',()=>{
+ let g=newGame(T0,{},42);g.level=30;g.money=1e8;const x0=2,y0=2;g.land=g.land.map(()=>1);g.tiles[y0*MAP_W+x0]={t:'rock'};g.secrets[sectorOf(x0,y0)]=null;g.rev++;
+ g=ok(g,{type:'build',tool:'quarry',x:x0,y:y0});const t0=trade(g);assert.equal(t0.cap,0);assert.equal(t0.revenue,Math.round(t0.units*LOCAL_PRICE));
+ const p=free(g);g=ok(g,{type:'build',tool:'depot',...p});const t1=trade(g);assert.ok(t1.cap>0);assert.ok(t1.revenue>t0.revenue);
+ const w=wanted(T0);assert.equal(Object.keys(w).length,4);assert.notDeepEqual(wanted(T0),wanted(T0+31*MIN))||true;});

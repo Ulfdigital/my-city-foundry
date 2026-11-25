@@ -1,7 +1,8 @@
 // My City Foundry – Spiellogik. Reine Funktionen: act(game, action, now) → {game, error, message}.
 import {VERSION,MAP_W,MAP_H,OLD_MAPS,SECTOR,SECTORS,START_SECTORS,LAND_LEVEL,landPrice,START_MONEY,OFFLINE_MAX_H,TOOLS,tool,ZONES,TREE_CLEAR,LEVELS,MAX_LEVEL,BIZ,bizMax,TAX_PER_PERSON,MOVE_IN_SEC,
  MAX_CITY_LEVEL,levelPop,LEVEL_BONUS,WORKER_SHARE,FREE_WORKERS,SHOP_SHARE,FACTORY_SHARE,ATTR_MOVE,TAX_DEFAULT,TAX_MIN,TAX_MAX,FACTORY_DIRT,HAPPY_MIN,
- ROAD_LANES,ROCK_ROAD,TRAFFIC_PER_PERSON,TRAFFIC_PER_JOB,TASKS_ACTIVE,EVENT_MIN,EVENTS} from './data.mjs';
+ ROAD_LANES,ROCK_ROAD,TRAFFIC_PER_PERSON,TRAFFIC_PER_JOB,TASKS_ACTIVE,EVENT_MIN,EVENTS,
+ FEATURES,GOLDVEIN_BONUS,GOODS,FACTORY_GOODS,LOCAL_PRICE,TRADE_PRICE,WANTED_BONUS,WANTED_MIN,NEIGHBORS} from './data.mjs';
 
 const MIN=6e4,H=36e5;
 export function rand(g){let t=(g.seed=(g.seed+0x6D2B79F5)>>>0);t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296;}
@@ -38,24 +39,32 @@ export function boughtLand(g){return g.land.reduce((a,v)=>a+v,0)-(START_SECTORS[
 export function canBuy(g,sx,sy){if(sx<0||sy<0||sx>=SECTORS||sy>=SECTORS||g.land[sy*SECTORS+sx])return false;
  return N4.some(([dx,dy])=>{const x=sx+dx,y=sy+dy;return x>=0&&y>=0&&x<SECTORS&&y<SECTORS&&g.land[y*SECTORS+x]===1;});}
 export function sectorPrice(g){return landPrice(boughtLand(g));}
+// Versteckte Schätze je Gebiet (Öl, Goldader) – werden einmal ausgewürfelt, sind aber vor dem Kauf sichtbar
+function makeSecrets(g){const st=startLand();return Array.from({length:SECTORS*SECTORS},(_,i)=>{const r=rand(g);if(st[i])return r<0.08?'oil':null;return r<0.14?'oil':r<0.24?'goldvein':null;});}
+export function sectorOf(x,y){return Math.floor(y/SECTOR)*SECTORS+Math.floor(x/SECTOR);}
+export function features(g,sx,sy){const i=sy*SECTORS+sx,f=info(g).feat[i]||[];return g.secrets?.[i]?[...f,g.secrets[i]]:f;}
+export function hasFeature(g,x,y,f){return features(g,Math.floor(x/SECTOR),Math.floor(y/SECTOR)).includes(f);}
 
 // ---------- Werte der Stadt (zwischengespeichert, bis sich die Karte ändert) ----------
 const cache=new WeakMap();
 const PROVIDES=['power','water','park','school','fire','police','hospital','bus','shop','dirt','transit'];
 const lanes=c=>c.lanes||1;
 export function info(g){const hit=cache.get(g);if(hit&&hit.rev===(g.rev||0))return hit.v;
- const N=MAP_W*MAP_H,v={pop:0,dirtyPop:0,jamPop:0,jobs:0,jobsShop:0,jobsFactory:0,upkeep:0,biztax:0,prod:0,attr:0,tour:0,count:{},cover:{},load:new Float32Array(N),jam:new Float32Array(N)};
+ const N=MAP_W*MAP_H,S=SECTORS*SECTORS,cnt=Array.from({length:S},()=>({w:0,r:0,t:0})),v={feat:[],goods:{},cap:0,pop:0,dirtyPop:0,jamPop:0,jobs:0,jobsShop:0,jobsFactory:0,upkeep:0,biztax:0,prod:0,attr:0,tour:0,count:{},cover:{},load:new Float32Array(N),jam:new Float32Array(N)};
  for(const p of PROVIDES)v.cover[p]=new Uint8Array(N);
  const stamp=(type,x0,y0,size,r)=>{const cv=v.cover[type];for(let y=Math.max(0,y0-r);y<=Math.min(MAP_H-1,y0+size-1+r);y++)for(let x=Math.max(0,x0-r);x<=Math.min(MAP_W-1,x0+size-1+r);x++){
   const dx=x<x0?x0-x:x>x0+size-1?x-(x0+size-1):0,dy=y<y0?y0-y:y>y0+size-1?y-(y0+size-1):0;if(dx+dy<=r)cv[idx(x,y)]=1;}};
  const base=new Float32Array(N);
  const emit=(x,y,amount)=>{let roads=0;for(const[dx,dy]of N4)if(tile(g,x+dx,y+dy)?.t==='road')roads++;if(!roads)return;for(const[dx,dy]of N4)if(tile(g,x+dx,y+dy)?.t==='road')base[idx(x+dx,y+dy)]+=amount/roads;};
- for(let i=0;i<N;i++){const c=g.tiles[i],x=i%MAP_W,y=(i/MAP_W)|0;
+ const gv=g.secrets||[];
+ for(let i=0;i<N;i++){const c=g.tiles[i],x=i%MAP_W,y=(i/MAP_W)|0,sc=cnt[sectorOf(x,y)];
+  if(c.t==='water')sc.w++;else if(c.t==='rock'||c.rock||tool(c.t)?.onRock)sc.r++;else if(c.t==='tree'||tool(c.t)?.keepTrees)sc.t++;
   if(c.t==='house'){const p=LEVELS[c.lvl].people;v.pop+=p;emit(x,y,p*TRAFFIC_PER_PERSON);continue;}
-  if(BIZ[c.t]){const j=BIZ[c.t].jobs[c.lvl];v.jobs+=j;if(c.t==='shop'){v.jobsShop+=j;stamp('shop',x,y,1,BIZ.shop.radius);}else{v.jobsFactory+=j;v.attr-=c.lvl;stamp('dirt',x,y,1,FACTORY_DIRT[Math.min(c.lvl,FACTORY_DIRT.length-1)]);}
+  if(BIZ[c.t]){const j=BIZ[c.t].jobs[c.lvl];v.jobs+=j;if(c.t==='shop'){v.jobsShop+=j;stamp('shop',x,y,1,BIZ.shop.radius);}else{v.jobsFactory+=j;v.goods.goods=(v.goods.goods||0)+j*FACTORY_GOODS;v.attr-=c.lvl;stamp('dirt',x,y,1,FACTORY_DIRT[Math.min(c.lvl,FACTORY_DIRT.length-1)]);}
    v.biztax+=BIZ[c.t].tax[c.lvl];emit(x,y,j*TRAFFIC_PER_JOB);continue;}
   const T=tool(c.t);if(!T||c.part||c.t==='road')continue;            // Teile großer Gebäude nur einmal (am Ursprung) zählen
-  v.count[c.t]=(v.count[c.t]||0)+1;v.upkeep+=T.upkeep||0;v.jobs+=T.jobs||0;v.attr+=T.attr||0;v.tour+=T.tour||0;v.prod+=T.prod||0;
+  v.count[c.t]=(v.count[c.t]||0)+1;v.upkeep+=T.upkeep||0;v.jobs+=T.jobs||0;v.attr+=T.attr||0;v.tour+=T.tour||0;v.cap+=T.cap||0;
+  if(T.prod){const p=T.prod*(T.onRock&&gv[sectorOf(x,y)]==='goldvein'?GOLDVEIN_BONUS:1);v.prod+=p;v.goods[T.good]=(v.goods[T.good]||0)+p;}
   if(T.provides)stamp(T.provides,x,y,T.size||1,T.radius);if(T.dirt)stamp('dirt',x,y,T.size||1,T.dirt);if(T.transit)stamp('bus',x,y,1,T.radius);
   if(T.jobs)emit(x,y,T.jobs*TRAFFIC_PER_JOB*0.4);}
  // Verkehr verteilt sich über das Straßennetz; Bus und Bahn entlasten
@@ -63,6 +72,7 @@ export function info(g){const hit=cache.get(g);if(hit&&hit.rev===(g.rev||0))retu
   for(const[dx,dy]of N4){const j=tile(g,x+dx,y+dy);if(j?.t==='road'){s+=load[idx(x+dx,y+dy)];n++;}}nx[i]=base[i]+(n?0.55*s/n:0);}load=nx;}
  for(let i=0;i<N;i++){if(g.tiles[i].t!=='road')continue;let l=load[i];if(v.cover.transit[i])l*=0.6;else if(v.cover.bus[i])l*=0.75;v.load[i]=l;v.jam[i]=l/ROAD_LANES[lanes(g.tiles[i])].cap;}
  for(let i=0;i<N;i++){const c=g.tiles[i];if(c.t!=='house')continue;const p=LEVELS[c.lvl].people;if(v.cover.dirt[i])v.dirtyPop+=p;if(jammedAt(g,v,i%MAP_W,(i/MAP_W)|0))v.jamPop+=p;}
+ v.feat=cnt.map(c=>{const f=[];if(c.w>=10&&c.w<200)f.push('beach');if(c.r>=15)f.push('mountain');if(c.t>=75)f.push('forest');return f;});
  v.attr=Math.max(0,v.attr);cache.set(g,{rev:g.rev||0,v});return v;}
 function jammedAt(g,v,x,y){let any=false;for(const[dx,dy]of N4){const c=tile(g,x+dx,y+dy);if(c?.t==='road'){any=true;if(v.jam[idx(x+dx,y+dy)]<=1)return false;}}return any;}
 export function jam(g,x,y){return info(g).jam[idx(x,y)]||0;}
@@ -78,7 +88,15 @@ export function attractiveness(g){return info(g).attr;}
 export function tourism(g){const v=info(g);return Math.round(v.tour*(1+Math.min(v.attr,150)/200));}
 export function upkeep(g){return info(g).upkeep;}
 export function taxRate(g){return g.tax??TAX_DEFAULT;}
-export function finances(g){const v=info(g),f=taxRate(g)/TAX_DEFAULT;const people=Math.round(v.pop*TAX_PER_PERSON*f),biz=Math.round(v.biztax*f),tour=tourism(g),mines=v.prod;
+// Handel: Nachbarstädte wünschen sich wechselnde Waren (alle 30 Minuten neu)
+export function wanted(now){const keys=Object.keys(GOODS),k=Math.floor(now/(WANTED_MIN*MIN));return Object.fromEntries(NEIGHBORS.map((n,i)=>[n.id,keys[(k*3+i*2+i*i)%keys.length]]));}
+export function nextWantedChange(now){const p=WANTED_MIN*MIN;return(Math.floor(now/p)+1)*p;}
+export function trade(g,now=g.lastAt||Date.now()){const v=info(g),w=new Set(Object.values(wanted(now))),ids=Object.keys(v.goods).filter(k=>v.goods[k]>0);
+ const units=ids.reduce((a,k)=>a+v.goods[k],0),share=units?Math.min(1,v.cap/units):0;let revenue=0;
+ const list=ids.map(k=>{const u=v.goods[k],sold=u*share,bonus=w.has(k)?WANTED_BONUS:1,r=sold*GOODS[k].value*TRADE_PRICE*bonus+(u-sold)*GOODS[k].value*LOCAL_PRICE;revenue+=r;
+  return{id:k,units:Math.round(u),sold:Math.round(sold),wanted:w.has(k),revenue:Math.round(r)};});
+ return{list,units:Math.round(units),cap:v.cap,used:Math.round(Math.min(units,v.cap)),revenue:Math.round(revenue)};}
+export function finances(g){const v=info(g),f=taxRate(g)/TAX_DEFAULT;const people=Math.round(v.pop*TAX_PER_PERSON*f),biz=Math.round(v.biztax*f),tour=tourism(g),mines=trade(g).revenue;
  return{people,biz,tour,mines,upkeep:v.upkeep,total:people+biz+tour+mines-v.upkeep};}
 export function incomePerMin(g){return finances(g).total;}
 // Zufriedenheit 0–100: Steuern, Attraktivität, Dreck und Lärm, Stau, Arbeitslose
@@ -135,8 +153,8 @@ function events(g,now){if(!g.nextEvent){g.nextEvent=now+(EVENT_MIN[0]+rand(g)*(E
 
 // ---------- Spielstand ----------
 export function newGame(now=Date.now(),{cityName='Neustadt'}={},seed=Math.floor(now%2147483647)||1){
- const g={version:VERSION,tax:TAX_DEFAULT,level:1,levelUps:[],city:{name:String(cityName).trim().slice(0,30)||'Neustadt'},money:START_MONEY,seed:seed>>>0,tiles:null,start:null,land:startLand(),tasks:[],events:[],stats:{},rev:0,createdAt:now,lastAt:now,earned:0};
- makeMap(g);refreshTasks(g);return update(g,now);}
+ const g={version:VERSION,tax:TAX_DEFAULT,level:1,levelUps:[],city:{name:String(cityName).trim().slice(0,30)||'Neustadt'},money:START_MONEY,seed:seed>>>0,tiles:null,start:null,land:startLand(),secrets:null,tasks:[],events:[],stats:{},rev:0,createdAt:now,lastAt:now,earned:0};
+ makeMap(g);g.secrets=makeSecrets(g);refreshTasks(g);return update(g,now);}
 export function update(g,now){const dt=Math.max(0,Math.min(now-(g.lastAt||now),OFFLINE_MAX_H*H));
  if(dt>0){const inc=incomePerMin(g)*dt/MIN;g.money=Math.round((g.money+inc)*100)/100;if(inc>0)g.earned=(g.earned||0)+inc;if(g.money<0)g.money=0;}
  // Grundstücke werden bebaut (Straße + Nachfrage, Fabriken brauchen Strom)
@@ -152,7 +170,7 @@ export function restore(raw){try{const g=typeof raw==='string'?JSON.parse(raw):r
  const old=OLD_MAPS.find(n=>g.tiles.length===n*n);if(old)migrate(g,old);else if(g.tiles.length!==MAP_W*MAP_H)return null;
  for(const c of g.tiles)if(c.t==='road'&&!c.lanes)c.lanes=1;
  g.stats=g.stats||{};g.level=g.level||1;g.levelUps=g.levelUps||[];g.rev=g.rev||0;if(g.tax===undefined)g.tax=TAX_DEFAULT;
- if(!Array.isArray(g.land)||g.land.length!==SECTORS*SECTORS)g.land=startLand();g.events=g.events||[];refreshTasks(g);return g;}catch{return null;}}
+ if(!Array.isArray(g.land)||g.land.length!==SECTORS*SECTORS)g.land=startLand();if(!Array.isArray(g.secrets))g.secrets=makeSecrets(g);g.events=g.events||[];refreshTasks(g);return g;}catch{return null;}}
 const moveIn=g=>Math.round((MOVE_IN_SEC[0]+rand(g)*(MOVE_IN_SEC[1]-MOVE_IN_SEC[0]))*1000);
 function stat(g,k,n=1){g.stats[k]=(g.stats[k]||0)+n;}
 function pay(g,n,what){if(g.money<n)throw new Error(`Dafür fehlt Geld: ${what} kostet ${Math.ceil(n).toLocaleString('de-DE')} Taler.`);g.money=Math.round((g.money-n)*100)/100;}
@@ -162,9 +180,11 @@ export function canPlace(g,id,x,y){const T=tool(id),s=T.size||1;let trees=0,wate
  for(let j=y;j<y+s;j++)for(let i=x;i<x+s;i++){const c=tile(g,i,j);if(!c)return{ok:false,why:'Das passt nicht mehr auf die Karte.'};
   if(!owns(g,i,j))return{ok:false,why:'Dieses Gebiet gehört dir noch nicht. Kaufe es mit „Land“.'};
   if(c.t==='water')return{ok:false,why:'Auf Wasser kann man nicht bauen.'};
+  if(T.anyGround){if(!['grass','tree','rock'].includes(c.t))return{ok:false,why:'Hier steht schon etwas. Erst abreißen.'};continue;}
   if(T.onRock){if(c.t!=='rock')return{ok:false,why:`${T.name} geht nur auf Fels (graue Berge).`};continue;}
   if(c.t==='rock')return{ok:false,why:'Auf Fels geht nur Bergbau oder eine Straße.'};
-  if(c.t!=='grass'&&c.t!=='tree')return{ok:false,why:s>1?`Für ${T.name} brauchst du ${s}×${s} freie Felder.`:'Hier steht schon etwas. Erst abreißen.'};if(c.t==='tree')trees++;}
+  if(c.t!=='grass'&&c.t!=='tree')return{ok:false,why:s>1?`Für ${T.name} brauchst du ${s}×${s} freie Felder.`:'Hier steht schon etwas. Erst abreißen.'};if(c.t==='tree'&&!T.keepTrees)trees++;}
+ if(T.feature&&!hasFeature(g,x,y,T.feature)){const F=FEATURES[T.feature];return{ok:false,why:`${T.name} geht nur in einem Gebiet mit ${F.icon} ${F.name}.`};}
  if(T.nearWater){for(let j=y-1;j<=y+s;j++)for(let i=x-1;i<=x+s;i++)if(tile(g,i,j)?.t==='water')water=true;if(!water)return{ok:false,why:`${T.name} muss direkt am Wasser stehen.`};}
  return{ok:true,trees};}
 
@@ -206,7 +226,7 @@ const A={
  renameCity(g,{name}){const n=String(name||'').trim().slice(0,30);if(n.length<2)throw new Error('Der Name ist zu kurz.');g.city.name=n;return`Deine Stadt heißt jetzt ${n}.`;}};
 
 // Schnelle Kopie: Felder werden nur ersetzt, nie verändert (siehe own()) – so bleibt das Ziehen von Straßen flüssig
-function copy(game){const g={...game,tiles:game.tiles.slice(),land:game.land.slice(),stats:{...game.stats},city:{...game.city},start:{...game.start},
+function copy(game){const g={...game,tiles:game.tiles.slice(),land:game.land.slice(),secrets:game.secrets?.slice(),stats:{...game.stats},city:{...game.city},start:{...game.start},
  tasks:(game.tasks||[]).map(t=>({...t})),events:[...(game.events||[])],levelUps:[...(game.levelUps||[])]};const c=cache.get(game);if(c)cache.set(g,c);return g;}
 const own=(g,x,y)=>{const i=idx(x,y);return g.tiles[i]={...g.tiles[i]};};
 export function act(game,action,now=Date.now()){const g=update(copy(game),now);
