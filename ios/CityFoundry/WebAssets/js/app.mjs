@@ -28,9 +28,9 @@ function renderStart(){document.body.className='startmode';
 
 // ---------- Stadt ----------
 function startCity(){document.body.className='citymode';
- $('#app').innerHTML=`<canvas id="map"></canvas><header class="top" id="top"></header><div id="panel" class="panel hidden"></div><div class="sub hidden" id="sub"></div><nav class="tools" id="tools"></nav>`;
+ $('#app').innerHTML=`<canvas id="map"></canvas><header class="top" id="top"></header><div id="panel" class="panel hidden"></div><div class="fab" id="fab"></div><div class="sub hidden" id="sub"></div><nav class="tools" id="tools"></nav>`;
  canvas=$('#map');ctx=canvas.getContext('2d');resize();cam.z=W<600?1.3:1.4;centerOn(cam,game.start.x,game.start.y+1,W,Hh);
- hud();toolbar();bindPointer();requestAnimationFrame(loop);tutShow();}
+ hud();toolbar();fab();bindPointer();requestAnimationFrame(loop);tutShow();}
 // Größe immer frisch messen: In der App ist das Fenster beim Start manchmal noch klein (dann war die Karte nur ein Streifen).
 function size(){const e=document.documentElement;return{w:Math.max(window.innerWidth||0,e.clientWidth||0),h:Math.max(window.innerHeight||0,e.clientHeight||0),d:Math.min(2,window.devicePixelRatio||1)};}
 function resize(){const s=size();dpr=s.d;W=s.w;Hh=s.h;if(!canvas)return;canvas.width=Math.round(W*dpr);canvas.height=Math.round(Hh*dpr);canvas.style.width=W+'px';canvas.style.height=Hh+'px';}
@@ -79,6 +79,7 @@ function savePanel(){const p=$('#panel');delete p.dataset.modal;sel=null;
   <h3 style="margin-top:14px">📥 Spielstand laden</h3><p class="muted small">Code hier einfügen. Achtung: Die Stadt auf diesem Gerät wird dabei ersetzt.</p>
   <textarea id="impcode" rows="3" placeholder="MCF1:…"></textarea><button class="wideb" data-imp>Spielstand laden</button>`;p.classList.remove('hidden');}
 
+function fab(){const f=$('#fab');if(f)f.innerHTML=`<button data-mini title="Übersichtskarte" aria-label="Übersichtskarte">🧭</button>${undoStack.length?'<button data-undo title="Rückgängig" aria-label="Rückgängig">↩️</button>':''}`;}
 function envIcon(){const now=Date.now(),dn=clock(now),w=sky(now);return`${audio.daynight&&dn.night>0.5?'🌙':WEATHER[w].icon}<small>${SEASONS[season(now)].icon}</small>`;}
 function toolbar(){setTimeout(()=>{const S=TUT[game?.tut?.step];if(game?.tut&&!game.tut.done&&S?.group)document.querySelector(`[data-group="${S.group}"]`)?.classList.add('pulse');},0);const lv=cityLevel(game);
  $('#tools').innerHTML=GROUPS.map(G=>{const ts=TOOLS.filter(t=>t.group===G.id),open=ts.some(t=>unlocked(game,t.id)),fresh=ts.filter(t=>unlocked(game,t.id)&&!built(game,t.id)&&t.lvl>1&&t.lvl>=lv-1).length;
@@ -95,8 +96,24 @@ document.addEventListener('visibilitychange',()=>{if(game)save();});
 
 // ---------- Bauen ----------
 function anchor(x,y){const n=tool(cur)?.size||1,o=Math.floor((n-1)/2);return{x:x-o,y:y-o,n};}
-function apply(x,y,quiet){if(!game)return false;if(cur==='land'){if(!quiet)landPanel(x,y);return false;}const a=anchor(x,y);if(a.n>1&&quiet)return false;const r=act(game,{type:'build',tool:cur,x:a.x,y:a.y},Date.now());
- if(r.error){if(!quiet||/Geld/.test(r.error)){toast(r.error,'err');sfx('error');}return false;}game=r.game;save();hud();sfx(cur==='bulldoze'?'bulldoze':cur==='road'||cur==='lanes'?'road':'build');if(r.message){toast(r.message,'gold');toolbar();}tutCheck();return true;}
+// ---------- Mini-Karte: ganze Welt auf einen Blick, Tippen springt dorthin ----------
+const MINI_COL={grass:'#86c56a',tree:'#3f8a3a',water:'#4fa3d8',rock:'#9c9a94',road:'#55585e',zone:'#bfe3a8',zonec:'#bcd6f0',zonei:'#ecdf9c',shop:'#3d7fd1',factory:'#d4a017',park:'#5fb04a'};
+function miniColor(c){if(c.t==='house')return['','#f2c4a8','#e9a27f','#d9805e','#c0604a','#a04a6a','#7a3a8a','#4a2a9a'][c.lvl];return MINI_COL[c.t]||(tool(c.t)?.onRock?'#6d6a62':'#d64545');}
+function miniPanel(){const p=$('#panel');delete p.dataset.modal;sel=null;const S=2,Wm=MAP_W*S,Hm=MAP_H*S/2+2;
+ p.innerHTML=`<button class="close" data-close aria-label="Schließen">✕</button><h3>🧭 Übersichtskarte</h3><p class="muted small">Tippe auf eine Stelle, um dorthin zu springen. Der gelbe Punkt zeigt, wo du gerade bist.</p><canvas id="mini" width="${Wm*2}" height="${Hm*2}"></canvas>`;p.classList.remove('hidden');
+ const cv=$('#mini'),c2=cv.getContext('2d');c2.scale(2,2);
+ for(let y=0;y<MAP_H;y++)for(let x=0;x<MAP_W;x++){const c=game.tiles[y*MAP_W+x];c2.fillStyle=miniColor(c);const px=(x-y)*S/2+Wm/2,py=(x+y)*S/4;c2.fillRect(px-S/2,py,S,S/2+0.5);
+  if(!owns(game,x,y)){c2.fillStyle='rgba(20,30,20,.35)';c2.fillRect(px-S/2,py,S,S/2+0.5);}}
+ const here=screenToCell(cam,W/2,Hh/2),hx=(here.x-here.y)*S/2+Wm/2,hy=(here.x+here.y)*S/4;c2.fillStyle='#ffd23f';c2.strokeStyle='#1f2a36';c2.lineWidth=1;c2.beginPath();c2.arc(hx,hy,4,0,7);c2.fill();c2.stroke();
+ cv.onclick=e=>{const r=cv.getBoundingClientRect(),mx=(e.clientX-r.left)/r.width*Wm,my=(e.clientY-r.top)/r.height*Hm,u=(mx-Wm/2)/(S/2),v=my/(S/4),x=Math.round((v+u)/2),y=Math.round((v-u)/2);
+  centerOn(cam,Math.max(0,Math.min(MAP_W-1,x)),Math.max(0,Math.min(MAP_H-1,y)),W,Hh);p.classList.add('hidden');sfx('click');};}
+
+// ---------- Rückgängig ----------
+let undoStack=[],stroke=null;
+function remember(prev){undoStack.push(prev);if(undoStack.length>15)undoStack.shift();fab();}
+function undo(){if(!undoStack.length)return toast('Es gibt nichts mehr rückgängig zu machen.');game=update(undoStack.pop(),Date.now());save();sel=null;panel();hud();toolbar();fab();sfx('click');toast('↩️ Rückgängig gemacht');}
+function apply(x,y,quiet){if(!game)return false;const prev=game;if(cur==='land'){if(!quiet)landPanel(x,y);return false;}const a=anchor(x,y);if(a.n>1&&quiet)return false;const r=act(game,{type:'build',tool:cur,x:a.x,y:a.y},Date.now());
+ if(r.error){if(!quiet||/Geld/.test(r.error)){toast(r.error,'err');sfx('error');}return false;}if(stroke){if(!stroke.pushed){remember(stroke.prev);stroke.pushed=true;}}else remember(prev);game=r.game;save();hud();sfx(cur==='bulldoze'?'bulldoze':cur==='road'||cur==='lanes'?'road':'build');if(r.message){toast(r.message,'gold');toolbar();}tutCheck();return true;}
 function line(a,b,fn){let{x,y}=a;fn(x,y);while(x!==b.x||y!==b.y){if(x!==b.x)x+=Math.sign(b.x-x);else y+=Math.sign(b.y-y);fn(x,y);}}
 
 // ---------- Infofenster ----------
@@ -152,7 +169,7 @@ function bindPointer(){const pts=new Map();let start=null,moved=false,painting=f
  canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture(e.pointerId);pts.set(e.pointerId,pos(e));
   if(pts.size===2){painting=false;const[a,b]=[...pts.values()];pinch={d:Math.hypot(a.x-b.x,a.y-b.y),m:{x:(a.x+b.x)/2,y:(a.y+b.y)/2},z:cam.z,cx:cam.x,cy:cam.y};return;}
   start={...pos(e),cx:cam.x,cy:cam.y};moved=false;last=null;
-  if(cur!=='hand'){painting=true;const c=screenToCell(cam,e.clientX,e.clientY);last=c;apply(c.x,c.y,false);}});
+  if(cur!=='hand'){painting=true;stroke={prev:game,pushed:false};const c=screenToCell(cam,e.clientX,e.clientY);last=c;apply(c.x,c.y,false);}});
  canvas.addEventListener('pointermove',e=>{
   if(!pts.has(e.pointerId)){if(cur!=='hand'&&e.pointerType==='mouse'){const c=screenToCell(cam,e.clientX,e.clientY),a=anchor(c.x,c.y);const t=tile(game,c.x,c.y);preview=t?{x:a.x,y:a.y,n:a.n,ok:cur==='bulldoze'?t.t!=='water'&&t.t!=='grass':cur==='road'||cur.startsWith('zone')?(t.t==='grass'||t.t==='tree'):canPlace(game,cur,a.x,a.y).ok}:null;}return;}
   pts.set(e.pointerId,pos(e));
@@ -163,7 +180,7 @@ function bindPointer(){const pts=new Map();let start=null,moved=false,painting=f
   else if(moved){cam.x=start.cx+dx;cam.y=start.cy+dy;}});
  const end=e=>{pts.delete(e.pointerId);if(pts.size<2)pinch=null;
   if(pts.size===0){if(cur==='hand'&&start&&!moved){const c=screenToCell(cam,e.clientX,e.clientY);sel=tile(game,c.x,c.y)?c:null;panel();}
-   if(painting)save();painting=false;start=null;}};
+   if(painting)save();painting=false;stroke=null;start=null;}};
  canvas.addEventListener('pointerup',end);canvas.addEventListener('pointercancel',end);
  canvas.addEventListener('pointerleave',()=>{preview=null;});
  canvas.addEventListener('wheel',e=>{e.preventDefault();const z=Math.max(0.18,Math.min(2.6,cam.z*(e.deltaY<0?1.12:1/1.12)));cam.x=e.clientX-(e.clientX-cam.x)*z/cam.z;cam.y=e.clientY-(e.clientY-cam.y)*z/cam.z;cam.z=z;},{passive:false});}
@@ -228,7 +245,7 @@ function finance(){const p=$('#panel');delete p.dataset.modal;sel=null;const f=f
   <p class="muted small">Unter ${HAPPY_MIN} % wachsen keine Wohnblocks und Hochhäuser mehr.</p>
   <button class="wideb tradeb" data-trade>🚚 Handel mit Nachbarstädten</button><button class="${showDirt?'on':''} wideb" data-dirt>🌫️ Dreck und Lärm auf der Karte ${showDirt?'ausblenden':'zeigen'}</button><button class="${showTraffic?'on':''} wideb traf" data-traffic>🚗 Verkehr und Stau ${showTraffic?'ausblenden':'zeigen'}</button>`;p.classList.remove('hidden');
  $('#tax').oninput=e=>{$('#taxv').textContent=e.target.value+' %';};
- $('#tax').onchange=e=>{const r=act(game,{type:'setTax',tax:e.target.value},Date.now());if(r.error)return toast(r.error,'err');game=r.game;save();hud();finance();};}
+ $('#tax').onchange=e=>{const prev=game,r=act(game,{type:'setTax',tax:e.target.value},Date.now());if(r.error)return toast(r.error,'err');remember(prev);game=r.game;save();hud();finance();};}
 
 // ---------- Einstellungen ----------
 function settings(){const p=$('#panel');delete p.dataset.modal;const n=counts(game);sel=null;
@@ -246,11 +263,13 @@ document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b||
  if(d.group){group=d.group;const ts=TOOLS.filter(t=>t.group===group);if(ts.length===1){cur=ts[0].id;if(cur!=='hand'){sel=null;panel();toast(cur==='bulldoze'?'Tippe auf etwas, das weg soll.':cur==='land'?(unlocked(game,'land')?'Tippe auf ein gelb markiertes Gebiet, um es zu kaufen.':`Land kaufen geht ab Stadt-Level ${LAND_LEVEL}.`):'Tippe oder ziehe mit dem Finger, um Straßen zu bauen.');}}else if(!ts.some(t=>t.id===cur)){const first=ts.find(t=>unlocked(game,t.id)&&!(t.once&&built(game,t.id)));cur=first?first.id:'hand';if(first){sel=null;panel();}}preview=null;return toolbar();}
  if(d.tool){if(!unlocked(game,d.tool)){const t=tool(d.tool);return toast(`${t.icon} ${t.name} gibt es ab Stadt-Level ${t.lvl}. Lass deine Stadt weiter wachsen!`);}cur=d.tool;preview=null;toolbar();if(cur!=='hand'){sel=null;panel();const t=tool(cur);toast(t.feature?`${t.icon} ${t.name} geht nur in Gebieten mit ${FEATURES[t.feature].icon} ${FEATURES[t.feature].name}. Schau unter „Land“, wo es die gibt.`:cur==='land'?'Tippe auf ein Gebiet: Die Symbole zeigen Strand, Berge, Wald, Öl und Goldadern.':cur==='lanes'?'Tippe oder ziehe über Straßen. Rot = Stau.':t.onRock?`${t.icon} ${t.name} geht nur auf Fels (graue Berge in den Außengebieten).`:t.size>1?`${t.icon} ${t.name} braucht ${t.size}×${t.size} freie Felder. Tippe auf die Mitte.`:t.once&&built(game,t.id)?`${t.name} gibt es nur einmal.`:cur==='zone'?'Lege Wohngebiete direkt an eine Straße.':cur==='zonec'?'Lege Läden an eine Straße – sie bringen Arbeitsplätze.':cur==='zonei'?'Fabriken brauchen Straße und Strom – und bringen viele Arbeitsplätze.':t.radius?`${t.name}: versorgt alles im Umkreis von ${t.radius} Feldern.`:`${t.icon} ${t.name}: Tippe auf einen freien Platz.`);}return;}
  if('close'in d){sel=null;delete $('#panel').dataset.modal;return panel();}
- if('upgrade'in d){const r=act(game,{type:'upgrade',x:sel.x,y:sel.y},Date.now());if(r.error){sfx('error');return toast(r.error,'err');}game=r.game;save();sfx('upgrade');toast(r.message,'gold');tutCheck();hud();panel();return levelUps();}
+ if('upgrade'in d){const prev=game,r=act(game,{type:'upgrade',x:sel.x,y:sel.y},Date.now());if(r.error){sfx('error');return toast(r.error,'err');}remember(prev);game=r.game;save();sfx('upgrade');toast(r.message,'gold');tutCheck();hud();panel();return levelUps();}
  if('needs'in d){showNeeds=!showNeeds;hud();return settings();}
  if('finance'in d)return finance();
  if('dirt'in d){showDirt=!showDirt;return finance();}
  if('settings'in d){sfx('click');return settings();}
+ if('undo'in d)return undo();
+ if('mini'in d){sfx('click');return miniPanel();}
  if(d.aud){audio[d.aud]=!audio[d.aud];saveSettings();if(d.aud==='music'){audio.music?startMusic():stopMusic();}hud();return settings();}
  if('sky'in d){const now=Date.now(),dn=clock(now);return toast(`${SEASONS[season(now)].icon} ${SEASONS[season(now)].name} · ${WEATHER[sky(now)].icon} ${WEATHER[sky(now)].name} · ${audio.daynight?(dn.night>0.5?'🌙 ':'☀️ ')+dn.label:'immer Tag'}`);}
  if(d.ttab){taskTab=d.ttab;return tasks();}
@@ -272,9 +291,18 @@ document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b||
  if(d.skip){const r=act(game,{type:'skipTask',id:+d.skip},Date.now());game=r.game;save();return tasks();}
  if('trade'in d)return tradePanel();
  if('traffic'in d){showTraffic=!showTraffic;return finance();}
- if(d.buyland){const[sx,sy]=d.buyland.split(',').map(Number);const r=act(game,{type:'buyLand',sx,sy},Date.now());if(r.error)return toast(r.error,'err');sfx('coin');game=r.game;save();toast(r.message,'gold');hud();toolbar();sel=null;return panel();}
+ if(d.buyland){const[sx,sy]=d.buyland.split(',').map(Number),prev=game;const r=act(game,{type:'buyLand',sx,sy},Date.now());if(r.error)return toast(r.error,'err');sfx('coin');remember(prev);game=r.game;save();toast(r.message,'gold');hud();toolbar();sel=null;return panel();}
  if('rename'in d){const r=act(game,{type:'renameCity',name:$('#cityname').value},Date.now());if(r.error)return toast(r.error,'err');game=r.game;save();toast(r.message);hud();return settings();}
  if('reset'in d){if(confirm(`Wirklich eine neue Stadt gründen? ${game.city.name} wird gelöscht.`)){localStorage.removeItem(SAVE_KEY);game=null;canvas=null;renderStart();}}});
 
 document.addEventListener('pointerdown',()=>unlock(),{once:true});
-game=load();if(game){game=update(game,Date.now());startCity();}else renderStart();checkUpdate();
+// ---------- Willkommen zurück: was ist passiert, während du weg warst? ----------
+const fmtAway=ms=>{const m=Math.round(ms/6e4);return m<60?`${m} Minuten`:m<120?'gut eine Stunde':m<1440?`${Math.round(m/60)} Stunden`:`${Math.round(m/1440)} Tage`;};
+function catchUp(){if(!game)return;const now=Date.now(),away=now-(game.lastAt||now);const b={money:game.money,pop:population(game),level:cityLevel(game)};game=update(game,now);
+ if(away<3*6e4)return;const dm=Math.round(game.money-b.money),dp=population(game)-b.pop,dl=cityLevel(game)-b.level;if(dm<=0&&dp<=0&&dl<=0)return;
+ setTimeout(()=>{const p=$('#panel');if(!p||p.dataset.modal)return;p.dataset.modal='1';sel=null;
+  p.innerHTML=`<div class="lvup"><div class="big-emo">👋</div><h3>Willkommen zurück in ${esc(game.city.name)}!</h3><p class="muted">Du warst ${fmtAway(away)} weg${away>8*3600e3?' – die Stadtkasse zählt höchstens 8 Stunden':''}. In der Zeit ist passiert:</p>
+   <ul class="fin wb">${dm>0?`<li><span>🪙 Einnahmen</span><b class="pos">+${fmt(dm)} Taler</b></li>`:''}${dp>0?`<li><span>👥 Neue Einwohner</span><b class="pos">+${fmt(dp)}</b></li>`:''}${dl>0?`<li><span>⭐ Level</span><b class="pos">${b.level} → ${cityLevel(game)}</b></li>`:''}
+   ${(game.tasks||[]).some(t=>taskDone(game,t))?'<li><span>📋 Aufträge</span><b class="pos">fertig zum Abholen</b></li>':''}</ul><button class="big" data-close>Weiter bauen</button></div>`;p.classList.remove('hidden');sfx('coin');},400);}
+let hiddenAt=0;document.addEventListener('visibilitychange',()=>{if(!game||!canvas)return;if(document.visibilityState==='hidden')hiddenAt=Date.now();else if(hiddenAt&&Date.now()-hiddenAt>3*6e4){catchUp();hud();}});
+game=load();if(game){startCity();catchUp();}else renderStart();checkUpdate();
