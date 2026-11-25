@@ -50,11 +50,16 @@ function tree(ctx,x,y,s=1){const h=((x*7.3+y*3.1)%1+1)%1;ctx.fillStyle='#6b4a2e'
  if(SEASON==='spring'&&h<0.5){ctx.fillStyle='#ffc0d8';for(const[a,b]of[[3,-14],[-4,-10],[1,-9]]){ctx.beginPath();ctx.arc(x+a*s,y+b*s,1.3*s,0,7);ctx.fill();}}}
 
 function ground(ctx,c,x,y,cx,cy,t){
- const v=hash(x,y);let col='#86c56a';
- if(c.t==='water'){col='#4fa3d8';}else if(c.t==='rock'||(tool(c.t)?.onRock))col=v<0.5?'#9c9a94':'#a6a39c';else if(c.t==='road')col=['','#8d9096','#7d8086','#6c6f75','#55585e'][c.lanes||1];
- if(col==='#86c56a'||col==='#80bf64')col=SEASON==='winter'?(v<0.5?'#e9eff3':'#e1e9ee'):SEASON==='autumn'?(v<0.5?'#a5c064':'#9db95e'):SEASON==='spring'?(v<0.5?'#8fd16e':'#87cb67'):col;else if(c.t==='zone')col='#a9d98f';else if(c.t==='zonec')col='#a9cbe8';else if(c.t==='zonei')col='#e6d98f';else if(c.t==='park')col='#6fbf5a';else if(['sport','zoo','themepark','wind','ferris','naturepark'].includes(c.t))col='#74bf5c';else if(c.t==='ski')col='#eef5fb';else if(c.t==='airport')col='#b9bcb6';else if(tool(c.t)?.size)col='#cfcfc8';else col=v<0.5?'#86c56a':'#80bf64';
- ctx.fillStyle=col;diamond(ctx,cx,cy,TW/2+0.6,TH/2+0.6);ctx.fill();
- if(c.t==='rock'){ctx.fillStyle='#858279';ctx.beginPath();ctx.moveTo(cx-10+v*8,cy+3);ctx.lineTo(cx-3+v*8,cy-9-v*6);ctx.lineTo(cx+4+v*8,cy+3);ctx.fill();ctx.fillStyle='#b8b5ad';ctx.beginPath();ctx.moveTo(cx-3+v*8,cy-9-v*6);ctx.lineTo(cx+4+v*8,cy+3);ctx.lineTo(cx+v*8,cy+3);ctx.fill();
+ const v=hash(x,y);let col;
+ // Bodenfarbe: jede Art genau einmal festlegen (Straße grau, Wasser blau, Fels grau, Zonen farbig, sonst Gras je Jahreszeit)
+ if(c.t==='water')col='#4fa3d8';
+ else if(c.t==='road')col=['','#8d9096','#7d8086','#6c6f75','#55585e'][c.lanes||1];
+ else if(c.t==='rock'||(tool(c.t)?.onRock))col=v<0.5?'#9c9a94':'#a6a39c';
+ else if(c.t==='zone')col='#a9d98f';else if(c.t==='zonec')col='#a9cbe8';else if(c.t==='zonei')col='#e6d98f';
+ else if(c.t==='park')col='#6fbf5a';else if(['sport','zoo','themepark','wind','ferris','naturepark'].includes(c.t))col='#74bf5c';
+ else if(c.t==='ski')col='#eef5fb';else if(c.t==='airport')col='#b9bcb6';else if(tool(c.t)?.size)col='#cfcfc8';
+ else col=SEASON==='winter'?(v<0.5?'#e9eff3':'#e1e9ee'):SEASON==='autumn'?(v<0.5?'#a5c064':'#9db95e'):SEASON==='spring'?(v<0.5?'#8fd16e':'#87cb67'):(v<0.5?'#86c56a':'#80bf64');
+ ctx.fillStyle=col;diamond(ctx,cx,cy,TW/2+0.6,TH/2+0.6);ctx.fill(); if(c.t==='rock'){ctx.fillStyle='#858279';ctx.beginPath();ctx.moveTo(cx-10+v*8,cy+3);ctx.lineTo(cx-3+v*8,cy-9-v*6);ctx.lineTo(cx+4+v*8,cy+3);ctx.fill();ctx.fillStyle='#b8b5ad';ctx.beginPath();ctx.moveTo(cx-3+v*8,cy-9-v*6);ctx.lineTo(cx+4+v*8,cy+3);ctx.lineTo(cx+v*8,cy+3);ctx.fill();
   if(v>0.6){ctx.fillStyle='#8f8c84';ctx.beginPath();ctx.moveTo(cx+4,cy+6);ctx.lineTo(cx+10,cy-3);ctx.lineTo(cx+15,cy+6);ctx.fill();}}
  if(c.t==='water'&&v<0.025){const ph=t/5000+v*400,bx=cx+Math.cos(ph)*10,by=cy+Math.sin(ph)*4.5,dir=Math.sin(ph)>0?-1:1;   // Boot
   ctx.fillStyle='#8a5a33';ctx.beginPath();ctx.moveTo(bx-7*dir,by);ctx.lineTo(bx+7*dir,by);ctx.lineTo(bx+5*dir,by+3);ctx.lineTo(bx-5*dir,by+3);ctx.fill();
