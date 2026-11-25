@@ -102,7 +102,7 @@ function levelUps(){const ups=game.levelUps||[];if(!ups.length||$('#panel').data
 
 // ---------- Neue Version? (wichtig für die App: Updates kommen von der Website) ----------
 async function checkUpdate(){try{const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'});if(!r.ok)return;const v=(await r.json()).build;
- if(v&&v!==BUILD){if(game)save();location.reload();}}catch{}}
+ if(v&&v!==BUILD){try{if(sessionStorage.getItem('reload-'+v))return;sessionStorage.setItem('reload-'+v,'1');}catch{}if(game)save();location.reload();}}catch{}}
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')checkUpdate();});
 setInterval(checkUpdate,10*60*1000);
 
