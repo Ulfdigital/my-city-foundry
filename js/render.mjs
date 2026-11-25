@@ -15,9 +15,17 @@ export function weather(now){const s=season(now),r=hash1(Math.floor(now/(6*60*10
  const t={winter:[['snow',.35],['cloud',.3],['sun',.35]],spring:[['rain',.15],['cloud',.25],['sun',.6]],summer:[['rain',.1],['cloud',.2],['sun',.7]],autumn:[['rain',.25],['cloud',.35],['sun',.4]]}[s];
  let a=0;for(const[k,pr]of t){a+=pr;if(r<a)return k;}return'sun';}
 let SEASON='summer',LIGHTS=false;
-export const cellTop=(x,y)=>({x:(x-y)*TW/2,y:(x+y)*TH/2});
-export function screenToCell(cam,sx,sy){const wx=(sx-cam.x)/cam.z,wy=(sy-cam.y)/cam.z,u=wx/(TW/2),v=wy/(TH/2);return{x:Math.floor((v+u)/2),y:Math.floor((v-u)/2)};}
-export function centerOn(cam,x,y,w,h){const p=cellTop(x,y);cam.x=w/2-p.x*cam.z;cam.y=h/2-(p.y+TH/2)*cam.z;}
+// Karte drehen (0–3 = 0°, 90°, 180°, 270°): alle Umrechnungen Feld ↔ Bildschirm laufen über die Ansicht (u, v)
+let ROT=0;const NM=MAP_W;
+export function setRotation(r){ROT=((Math.round(r)%4)+4)%4;}
+export const getRotation=()=>ROT;
+export const vpt=(x,y)=>ROT===0?[x,y]:ROT===1?[NM-y,x]:ROT===2?[NM-x,NM-y]:[y,NM-x];     // Welt → Ansicht
+const wpt=(u,v)=>ROT===0?[u,v]:ROT===1?[v,NM-u]:ROT===2?[NM-u,NM-v]:[NM-v,u];            // Ansicht → Welt
+const rvec=(dx,dy)=>ROT===0?[dx,dy]:ROT===1?[-dy,dx]:ROT===2?[-dx,-dy]:[dy,-dx];          // Richtung Welt → Ansicht
+const wvec=(du,dv)=>ROT===0?[du,dv]:ROT===1?[dv,-du]:ROT===2?[-du,-dv]:[-dv,du];          // Richtung Ansicht → Welt
+export const cellTop=(x,y)=>{const[u,v]=vpt(x,y);return{x:(u-v)*TW/2,y:(u+v)*TH/2};};
+export function screenToCell(cam,sx,sy){const wx=(sx-cam.x)/cam.z,wy=(sy-cam.y)/cam.z,u=wx/(TW/2),v=wy/(TH/2),[x,y]=wpt((v+u)/2,(v-u)/2);return{x:Math.floor(x),y:Math.floor(y)};}
+export function centerOn(cam,x,y,w,h){const p=cellTop(x+0.5,y+0.5);cam.x=w/2-p.x*cam.z;cam.y=h/2-p.y*cam.z;}
 
 const hash=(x,y)=>{let h=(x*73856093)^(y*19349663);h=(h^(h>>>13))*1274126177;return((h^(h>>>16))>>>0)/4294967296;};
 const WALLS=[['#f4e3c1','#e3cc9f'],['#f2d0c4','#dfb3a4'],['#dfe8f0','#c3d0dc'],['#f5f0e6','#ddd5c4'],['#e8ddf0','#cfc0dc'],['#d9ecd5','#bdd6b7']];
@@ -68,7 +76,7 @@ function ground(ctx,c,x,y,cx,cy,t){
  if(c.t==='zone'||c.t==='zonec'||c.t==='zonei'){ctx.strokeStyle=c.t==='zone'?'rgba(60,120,40,.7)':c.t==='zonec'?'rgba(40,90,160,.7)':'rgba(150,120,20,.8)';ctx.setLineDash([4,3]);ctx.lineWidth=1.2;diamond(ctx,cx,cy,TW/2-5,TH/2-2.5);ctx.stroke();ctx.setLineDash([]);
   if(c.ready){ctx.fillStyle='#c9a46a';ctx.fillRect(cx-8,cy-6,16,3);ctx.fillStyle='#8d6b3a';ctx.fillRect(cx-7,cy-12,2,9);ctx.fillRect(cx+5,cy-12,2,9);ctx.font='11px sans-serif';ctx.textAlign='center';ctx.fillText('🚧',cx,cy-12);}}
 }
-function roadMarks(ctx,g,x,y,cx,cy,c,t,cars){const n=[[1,0],[-1,0],[0,1],[0,-1]].map(([dx,dy])=>tile(g,x+dx,y+dy)?.t==='road');
+function roadMarks(ctx,g,x,y,cx,cy,c,t,cars){const VD=[[1,0],[-1,0],[0,1],[0,-1]].map(([du,dv])=>wvec(du,dv)),n=VD.map(([dx,dy])=>tile(g,x+dx,y+dy)?.t==='road');
  const ends=[{x:cx+TW/4,y:cy+TH/4},{x:cx-TW/4,y:cy-TH/4},{x:cx-TW/4,y:cy+TH/4},{x:cx+TW/4,y:cy-TH/4}],L=c.lanes||1;
  ctx.strokeStyle=L>=4?'rgba(255,214,80,.9)':'rgba(255,255,255,.85)';ctx.lineWidth=L>=2?1.1:1.4;ctx.setLineDash(L>=2?[]:[4,4]);
  let any=false;n.forEach((on,i)=>{if(!on)return;any=true;if(c.rail)return;const e=ends[i];
@@ -89,7 +97,7 @@ function roadMarks(ctx,g,x,y,cx,cy,c,t,cars){const n=[[1,0],[-1,0],[0,1],[0,-1]]
  if(cars&&any){const dirs=n.map((on,i)=>on?i:-1).filter(i=>i>=0),k=Math.min(6,Math.round(cars*4));
   for(let m=0;m<k;m++){const d=dirs[m%dirs.length],e=ends[d],back=m%2,axis=d<2?0:1;
    // Fährt das Auto auf eine Kreuzung zu? Dann läuft seine Uhr nur bei Grün weiter (Auto steht bei Rot)
-   const nx=x+[1,-1,0,0][d],ny=y+[0,0,1,-1][d],toCross=!back&&isCrossing(g,nx,ny),here=crossing&&!toCross;
+   const nx=x+VD[d][0],ny=y+VD[d][1],toCross=!back&&isCrossing(g,nx,ny),here=crossing&&!toCross;
    const clock=toCross?driveClock(t,axis,nx,ny):here?driveClock(t,axis,x,y):t;
    if(here&&!green(t,axis,x,y)&&!back)continue;                 // auf der Kreuzung selbst: Querverkehr wartet
    const ph=((clock/2200+m*0.37+(x*7+y*3)*0.13)%1);const s0=back?1-ph:ph;
@@ -185,7 +193,8 @@ function turbine(ctx,x,y,t,ph){ctx.strokeStyle='#e8ecef';ctx.lineWidth=2.5;ctx.b
  for(let k=0;k<3;k++){const b=a+k*2.094;ctx.beginPath();ctx.moveTo(x,y-46);ctx.lineTo(x+Math.cos(b)*17,y-46+Math.sin(b)*17);ctx.stroke();}ctx.fillStyle='#ccc';ctx.beginPath();ctx.arc(x,y-46,2.5,0,7);ctx.fill();}
 // ---------- Schienennetz: Gleise, Bahnübergänge und Züge, die von Bahnhof zu Bahnhof fahren ----------
 // Alles in Feld-Koordinaten der Welt (x, y als Kommazahlen); W(p,h) rechnet in Bildschirm-Punkte um
-const W=(p,h=0)=>[(p[0]-p[1])*TW/2,(p[0]+p[1])*TH/2-h];
+const Wv=(p,h=0)=>[(p[0]-p[1])*TW/2,(p[0]+p[1])*TH/2-h];   // Ansicht → Bildschirm
+const W=(p,h=0)=>Wv(vpt(p[0],p[1]),h);                          // Welt → Bildschirm
 const fillPoly=(ctx,ps,col)=>{ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(...ps[0]);for(const p of ps.slice(1))ctx.lineTo(...p);ctx.closePath();ctx.fill();};
 const strokeLine=(ctx,ps,col,w)=>{ctx.strokeStyle=col;ctx.lineWidth=w;ctx.beginPath();ctx.moveTo(...ps[0]);for(const p of ps.slice(1))ctx.lineTo(...p);ctx.stroke();};
 const glowOn=f=>{if(!LIGHTS)return;ctx0.globalAlpha=1;f();ctx0.globalAlpha=0;};let ctx0=null;
@@ -217,7 +226,7 @@ function railTile(ctx,g,x,y,c){const{pieces,ends}=railPieces(g,x,y);for(const ps
   for(const s of[1,-1])strokeLine(ctx,[[q[0]-4,q[1]-13-s*2.5],[q[0]+4,q[1]-13+s*2.5]],'#d0312d',1.6);}}
 
 // Ein Wagen von A nach B (Feld-Koordinaten). noseA/noseB: Lok-Front an diesem Ende
-function railcar(ctx,A,B,noseA,noseB,body,stripe){const L=Math.hypot(B[0]-A[0],B[1]-A[1]);if(L<0.03)return;
+function railcar(ctx,A,B,noseA,noseB,body,stripe){A=vpt(A[0],A[1]);B=vpt(B[0],B[1]);const W=Wv,L=Math.hypot(B[0]-A[0],B[1]-A[1]);if(L<0.03)return;
  const d=[(B[0]-A[0])/L,(B[1]-A[1])/L],w=0.13,H=13;let n=[-d[1],d[0]];if(n[0]+n[1]<0)n=[-n[0],-n[1]];   // n: die Seite, die zu uns zeigt
  const at=(s,o,h)=>W([A[0]+d[0]*s+n[0]*o,A[1]+d[1]*s+n[1]*o],h),nA=noseA?0.15:0,nB=noseB?0.15:0,s0=nA,s1=L-nB,endB=d[0]+d[1]>0;
  ctx.fillStyle='#1d1d1f';for(const s of[0.09,0.17,L-0.17,L-0.09])if(s>0&&s<L){const p=at(s,w,1.6);ctx.beginPath();ctx.arc(p[0],p[1],1.4,0,7);ctx.fill();}
@@ -280,7 +289,7 @@ export function trainCars(g,net,t){const cell=new Map(),stn=new Map();
  for(const tour of net.tours){const p=((t%tour.period)+tour.period)%tour.period;const l=tour.legs.find(l=>p>=l.start&&p<l.start+l.travel+l.wait)||tour.legs[0];
   const q=Math.min(1,(p-l.start)/l.travel),e=q*q*(3-2*q),head=l.s0+(l.s1-l.s0)*e;
   for(let k=0;k<TRAIN_CARS;k++){const a1=head-k*(CAR_LEN+CAR_GAP),a0=a1-CAR_LEN,A=pointAt(l,a0),B=pointAt(l,a1),M=[(A[0]+B[0])/2,(A[1]+B[1])/2];
-   const car={A,B,noseA:k===TRAIN_CARS-1,noseB:k===0,body:tour.colors[0],stripe:tour.colors[1],depth:M[0]+M[1]};
+   const vm=vpt(M[0],M[1]),car={A,B,noseA:k===TRAIN_CARS-1,noseB:k===0,body:tour.colors[0],stripe:tour.colors[1],depth:vm[0]+vm[1]};
    let sk=-1;for(const p of[A,M,B]){const c=tile(g,Math.floor(p[0]),Math.floor(p[1]));if(c?.t==='train'){sk=idx(c.rx,c.ry);car.row=Math.floor(M[1]);break;}}
    const m=sk>=0?stn:cell,key=sk>=0?sk:idx(Math.floor(M[0]),Math.floor(M[1]));if(!m.has(key))m.set(key,[]);m.get(key).push(car);}}
  for(const m of[cell,stn])for(const a of m.values())a.sort((p,q)=>p.depth-q.depth);return{cell,stn};}
@@ -291,27 +300,32 @@ const drawCars=(ctx,list)=>{if(list)for(const c of list)railcar(ctx,c.A,c.B,c.no
 // Die Gleise liegen genau in der Mitte der beiden Feld-Reihen, damit verlegte Schienen nahtlos anschließen.
 function station(ctx,rx,ry,t){const X=rx+1,Y=ry+1,P=(a,b,h=0)=>W([X+a,Y+b],h);
  const poly=(ps,col)=>fillPoly(ctx,ps,col),line=(p,q,col,w)=>strokeLine(ctx,[p,q],col,w);
- const boxAB=(a0,a1,b0,b1,h,col,top)=>{poly([P(a0,b1),P(a1,b1),P(a1,b1,h),P(a0,b1,h)],shade(col,0.86));poly([P(a1,b0),P(a1,b1),P(a1,b1,h),P(a1,b0,h)],shade(col,0.72));poly([P(a0,b0,h),P(a1,b0,h),P(a1,b1,h),P(a0,b1,h)],top||shade(col,1.06));};
+ const rb=rvec(0,1),near=rb[0]+rb[1]>0;     // zeigt die Bahnhofs-Vorderseite (+b) zu uns? Sonst ist die Rückseite vorne
+ // Quader im Bahnhof: gezeichnet werden nur die Seiten, die in der aktuellen Drehung zu uns zeigen
+ const boxAB=(a0,a1,b0,b1,h,col,top)=>{const cs=[[a0,b0],[a1,b0],[a1,b1],[a0,b1]].map(([a,b])=>vpt(X+a,Y+b)),us=cs.map(p=>p[0]),vs=cs.map(p=>p[1]);
+  const u0=Math.min(...us),u1=Math.max(...us),v0=Math.min(...vs),v1=Math.max(...vs),Q=(u,v,h=0)=>Wv([u,v],h);
+  poly([Q(u0,v1),Q(u1,v1),Q(u1,v1,h),Q(u0,v1,h)],shade(col,0.86));poly([Q(u1,v0),Q(u1,v1),Q(u1,v1,h),Q(u1,v0,h)],shade(col,0.72));poly([Q(u0,v0,h),Q(u1,v0,h),Q(u1,v1,h),Q(u0,v1,h)],top||shade(col,1.06));};
  const masts=m=>{if(LIGHTS)return;for(const a of[-0.85,0,0.85]){line(P(a,m,0),P(a,m,30),'#7a8088',1.4);line(P(a,m,29),P(a,m+(m<0?-0.22:-0.25),29),'#7a8088',1);}};
  const wire=b=>{if(!LIGHTS)line(P(-1,b,27),P(1,b,27),'rgba(60,60,60,.75)',0.6);};
  // Eigener Zug, solange keine Strecke über dieses Gleis führt: fährt ein, hält, fährt weiter
  const local=(b,off,body,stripe)=>{const T=16000,p=(((t+off)%T)+T)%T/T,stop=0.95;
   const head=p<0.4?-1+(stop+1)*(1-(1-p/0.4)**2):p<0.65?stop:stop+2.1*((p-0.65)/0.35)**2;
-  for(let k=TRAIN_CARS-1;k>=0;k--){const A1=head-k*(CAR_LEN+CAR_GAP),A0=A1-CAR_LEN,a0=Math.max(-1,A0),a1=Math.min(1,A1);if(a1-a0<0.03)continue;
-   railcar(ctx,[X+a0,Y+b],[X+a1,Y+b],k===TRAIN_CARS-1&&A0>=-1,k===0&&A1<=1,body,stripe);}};
+  const cars=[];for(let k=TRAIN_CARS-1;k>=0;k--){const A1=head-k*(CAR_LEN+CAR_GAP),A0=A1-CAR_LEN,a0=Math.max(-1,A0),a1=Math.min(1,A1);if(a1-a0<0.03)continue;
+   const m=vpt(X+(a0+a1)/2,Y+b);cars.push({A:[X+a0,Y+b],B:[X+a1,Y+b],noseA:k===TRAIN_CARS-1&&A0>=-1,noseB:k===0&&A1<=1,body,stripe,depth:m[0]+m[1]});}
+  drawCars(ctx,cars.sort((p,q)=>p.depth-q.depth));};
  const rowCars=r=>{const list=CARS.stn.get(idx(rx,ry));return list&&list.filter(c=>c.row===r);};
  const trackRow=(b,r,off,col)=>{if(!LIGHTS)drawTrack(ctx,[[rx,Y+b],[rx+2,Y+b]]);
   if(NET.used.has(idx(rx,r)))drawCars(ctx,rowCars(r));else local(b,off,col[0],col[1]);};
- // Bahnhofsgebäude hinten
- boxAB(-0.8,0.55,-0.98,-0.7,26,'#e9dcc2','#b5523a');
- for(let k=0;k<5;k++){const a=-0.7+k*0.25,q=[P(a,-0.7,6),P(a+0.12,-0.7,6),P(a+0.12,-0.7,18),P(a,-0.7,18)];poly(q,'#5c7ea0');glowOn(()=>poly(q,'#ffd877'));}
- {const p=P(-0.12,-0.7,22);ctx.fillStyle='#fff';ctx.beginPath();ctx.ellipse(p[0],p[1]+1,3.4,3,0,0,7);ctx.fill();ctx.strokeStyle='#333';ctx.lineWidth=0.7;ctx.stroke();line([p[0],p[1]+1],[p[0],p[1]-1.2],'#333',0.6);line([p[0],p[1]+1],[p[0]+1.5,p[1]+1.6],'#333',0.6);}
- // hinteres Gleis, Bahnsteig mit Dach, vorderes Gleis
- masts(-0.3);trackRow(-0.5,ry,0,TRAIN_COLORS[0]);wire(-0.5);
- boxAB(-0.95,0.95,-0.3,0.3,3,'#d6d0c2','#e2ddd2');line(P(-0.95,-0.27,3.1),P(0.95,-0.27,3.1),'#f1c40f',1);line(P(-0.95,0.27,3.1),P(0.95,0.27,3.1),'#f1c40f',1);
- for(const a of[-0.6,0,0.6])line(P(a,0,3),P(a,0,21),'#5a6470',1.4);
- poly([P(-0.8,-0.25,21),P(0.8,-0.25,21),P(0.8,0.25,21),P(-0.8,0.25,21)],'#6a7886');poly([P(-0.8,0.25,19),P(0.8,0.25,19),P(0.8,0.25,21),P(-0.8,0.25,21)],'#4d5965');
- masts(0.78);trackRow(0.5,ry+1,8000,TRAIN_COLORS[1]);wire(0.5);
+ // Teile von hinten nach vorne – bei gedrehter Karte in umgekehrter Reihenfolge
+ const house=()=>{boxAB(-0.8,0.55,-0.98,-0.7,26,'#e9dcc2','#b5523a');const f=near?-0.7:-0.98;                 // Bahnhofsgebäude, Fenster auf der sichtbaren Seite
+  for(let k=0;k<5;k++){const a=-0.7+k*0.25,q=[P(a,f,6),P(a+0.12,f,6),P(a+0.12,f,18),P(a,f,18)];poly(q,'#5c7ea0');glowOn(()=>poly(q,'#ffd877'));}
+  const p=P(-0.12,f,22);ctx.fillStyle='#fff';ctx.beginPath();ctx.ellipse(p[0],p[1]+1,3.4,3,0,0,7);ctx.fill();ctx.strokeStyle='#333';ctx.lineWidth=0.7;ctx.stroke();line([p[0],p[1]+1],[p[0],p[1]-1.2],'#333',0.6);line([p[0],p[1]+1],[p[0]+1.5,p[1]+1.6],'#333',0.6);};
+ const back=()=>{masts(-0.3);trackRow(-0.5,ry,0,TRAIN_COLORS[0]);wire(-0.5);};
+ const platform=()=>{boxAB(-0.95,0.95,-0.3,0.3,3,'#d6d0c2','#e2ddd2');line(P(-0.95,-0.27,3.1),P(0.95,-0.27,3.1),'#f1c40f',1);line(P(-0.95,0.27,3.1),P(0.95,0.27,3.1),'#f1c40f',1);
+  for(const a of[-0.6,0,0.6])line(P(a,0,3),P(a,0,21),'#5a6470',1.4);const f=near?0.25:-0.25;
+  poly([P(-0.8,-0.25,21),P(0.8,-0.25,21),P(0.8,0.25,21),P(-0.8,0.25,21)],'#6a7886');poly([P(-0.8,f,19),P(0.8,f,19),P(0.8,f,21),P(-0.8,f,21)],'#4d5965');};
+ const front=()=>{masts(0.78);trackRow(0.5,ry+1,8000,TRAIN_COLORS[1]);wire(0.5);};
+ for(const part of near?[house,back,platform,front]:[front,platform,back,house])part();
  label(ctx,P(-0.12,-0.84,0)[0],P(-0.12,-0.84,40)[1],'🚉',14);}
 function special(ctx,id,cx,cy,n,t,big){const hw=n*TW/2*0.82,hh=n*TH/2*0.82;if(big){ctx.save();ctx.translate(cx,cy);ctx.scale(1.15,1.15);ctx.translate(-cx,-cy);}try{
  switch(id){
@@ -400,8 +414,10 @@ function special(ctx,id,cx,cy,n,t,big){const hw=n*TW/2*0.82,hh=n*TH/2*0.82;if(bi
    box(ctx,cx-hw*0.55,cy-hh*0.55,14,7,16,'#e3e8ec');break;}
   case'pump':cyl(ctx,cx-hw*0.35,cy,14,18,'#7fa9c9','#a9cbe8');cyl(ctx,cx+hw*0.25,cy-hh*0.3,12,16,'#7fa9c9','#a9cbe8');box(ctx,cx+hw*0.2,cy+hh*0.4,14,7,14,'#e3e8ec');label(ctx,cx-hw*0.35,cy-26,'💧',12);break;
  }}finally{if(big){ctx.restore();if(id==='space')label(ctx,cx,cy-150,'🛸',18);if(id==='stadium')label(ctx,cx,cy-40,'🏅',16);}}}
+// Das Feld eines n×n-Gebäudes, das in der aktuellen Drehung zuletzt (ganz vorne) gezeichnet wird
+function frontCell(rx,ry,n){let best=null,bd=-1;for(const[x,y]of[[rx,ry],[rx+n-1,ry],[rx,ry+n-1],[rx+n-1,ry+n-1]]){const[u,v]=vpt(x+0.5,y+0.5);if(u+v>bd){bd=u+v;best=[x,y];}}return best;}
 function building(ctx,c,x,y,cx,cy,t){
- const T=tool(c.t);if(T&&(T.size>1)){if(c.rx===undefined)return;const n=T.size;if(x!==c.rx+n-1||y!==c.ry+n-1)return;if(c.t==='train')return station(ctx,c.rx,c.ry,t);const p=cellTop(c.rx+n/2,c.ry+n/2);return special(ctx,c.t,p.x,p.y,n,t);}
+ const T=tool(c.t);if(T&&(T.size>1)){if(c.rx===undefined)return;const n=T.size;const F=frontCell(c.rx,c.ry,n);if(x!==F[0]||y!==F[1])return;if(c.t==='train')return station(ctx,c.rx,c.ry,t);const p=cellTop(c.rx+n/2,c.ry+n/2);return special(ctx,c.t,p.x,p.y,n,t);}
  if(T&&['school','fire','police','bus','tvtower','quarry','village','metro','cablecar','oil','depot'].includes(c.t))return special(ctx,c.t,cx,cy,1,t);
  if(c.t==='shop')return shop(ctx,c,x,y,cx,cy,t);if(c.t==='factory')return factory(ctx,c,x,y,cx,cy,t);
  if(c.t==='tree'){const v=hash(x,y);tree(ctx,cx-8+v*6,cy+2,1);tree(ctx,cx+8,cy-2+v*4,0.85);if(v>0.5)tree(ctx,cx,cy+6,0.75);}
@@ -420,11 +436,11 @@ function bubble(ctx,cx,cy,text,bg){ctx.fillStyle=bg;ctx.strokeStyle='rgba(0,0,0,
  ctx.font='11px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#222';ctx.fillText(text,cx,cy+0.5);ctx.textBaseline='alphabetic';}
 const HEIGHT={house:[0,30,38,40,60,104,170,270],shop:[0,22,30,46,70,120,200],factory:[0,24,48,74,64,52]};
 
-export function draw(ctx,g,cam,{w,h,dpr,sel,preview,t,showNeeds,money,dirt,traffic,land,bg=true,area,env}){const V=info(g);TRUCKS=V.cap>0;SEASON=env?.season||'summer';NIGHT=env?.night||0;LIGHTS=false;ZOOM=cam.z;const vis=[];
+export function draw(ctx,g,cam,{w,h,dpr,sel,preview,t,showNeeds,money,dirt,traffic,land,bg=true,area,env,ghost}){const V=info(g);TRUCKS=V.cap>0;SEASON=env?.season||'summer';NIGHT=env?.night||0;LIGHTS=false;ZOOM=cam.z;const vis=[];
  ctx.setTransform(dpr,0,0,dpr,0,0);if(bg){ctx.fillStyle='#5f9d4b';ctx.fillRect(0,0,w,h);}
  ctx.setTransform(dpr*cam.z,0,0,dpr*cam.z,dpr*cam.x,dpr*cam.y);
  const pad=200;ctx0=ctx;NET=railNet(g);CARS=trainCars(g,NET,t);const cells=[];
- for(let d=0;d<MAP_W+MAP_H-1;d++)for(let x=Math.max(0,d-MAP_H+1);x<=Math.min(d,MAP_W-1);x++){const y=d-x,p=cellTop(x,y),cx=p.x,cy=p.y+TH/2;
+ for(let d=0;d<MAP_W+MAP_H-1;d++)for(let u=Math.max(0,d-MAP_H+1);u<=Math.min(d,MAP_W-1);u++){const q=wpt(u+0.5,d-u+0.5),x=Math.floor(q[0]),y=Math.floor(q[1]),p=cellTop(x+0.5,y+0.5),cx=p.x,cy=p.y;
   const sx=cx*cam.z+cam.x,sy=cy*cam.z+cam.y;if(sx<-pad||sx>w+pad||sy<-pad||sy>h+pad*2)continue;if(area&&(x<area[0]||y<area[1]||x>area[2]||y>area[3]))continue;cells.push([x,y,cx,cy]);}
  // 1. Durchgang: flacher Boden (Gras, Straßen, Gleise, Markierungen) – so verdeckt nichts Flaches einen Zug oder ein Haus
  for(const[x,y,cx,cy]of cells){const c=g.tiles[y*MAP_W+x],mine=owns(g,x,y);ground(ctx,c,x,y,cx,cy,t);
@@ -437,7 +453,9 @@ export function draw(ctx,g,cam,{w,h,dpr,sel,preview,t,showNeeds,money,dirt,traff
  // 2. Durchgang: von hinten nach vorne Ampeln, Autos, Züge und Gebäude
  for(const[x,y,cx,cy]of cells){const c=g.tiles[y*MAP_W+x];
   if(c.t==='road')roadMarks(ctx,g,x,y,cx,cy,c,t,cam.z>0.55?Math.min(1.5,V.jam[y*MAP_W+x]):0);
-  drawCars(ctx,CARS.cell.get(y*MAP_W+x));building(ctx,c,x,y,cx,cy,t);if(NIGHT>0.05)vis.push([c,x,y,cx,cy]);
+  drawCars(ctx,CARS.cell.get(y*MAP_W+x));
+  // Beim Straßenbau sind Gebäude durchsichtig, damit man die Straßen dahinter sieht
+  const see=ghost&&c.t!=='tree'&&c.t!=='road'&&c.t!=='rail';if(see)ctx.globalAlpha=0.28;building(ctx,c,x,y,cx,cy,t);if(see)ctx.globalAlpha=1;if(NIGHT>0.05)vis.push([c,x,y,cx,cy]);
   if(showNeeds&&HEIGHT[c.t]){const top=cy-HEIGHT[c.t][c.lvl]-6;
    if(c.lvl<maxLevel(c)){const miss=missing(g,x,y,c.lvl+1);if(miss.length){if(miss[0]!=='city')bubble(ctx,cx,top,NEEDS[miss[0]].icon,'rgba(255,255,255,.92)');}else if(money>=upgradeCost(c))bubble(ctx,cx,top,'⬆️','rgba(190,240,160,.95)');}}
  }

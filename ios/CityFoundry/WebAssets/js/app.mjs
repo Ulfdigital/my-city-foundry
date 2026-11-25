@@ -1,7 +1,7 @@
 // My City Foundry – Oberfläche: Karte zum Verschieben/Zoomen, Werkzeugleiste, Infofenster. Speichert automatisch auf dem Gerät.
 import {SAVE_KEY,TOOLS,GROUPS,tool,LEVELS,MAX_LEVEL,NEEDS,TREE_CLEAR,citySize,MAP_W,MAP_H,BIZ,bizMax,BUILD,levelPop,MAX_CITY_LEVEL,TAX_MIN,TAX_MAX,TAX_DEFAULT,happyText,happyIcon,HAPPY_MIN,SECTOR,ROAD_LANES,LAND_LEVEL,FEATURES,GOODS,NEIGHBORS,TRADE_PRICE,LOCAL_PRICE,WANTED_BONUS} from './data.mjs';
 import {newGame,act,update,restore,tile,population,incomePerMin,missing,has,hasRoad,counts,cityLevel,nextLevelPop,unlocked,demand,jobs,maxLevel,upgradeCost,attractiveness,tourism,built,canPlace,happiness,mood,finances,taxRate,covered,owns,canBuy,sectorPrice,jam,taskProgress,taskDone,features,trade,wanted,nextWantedChange,ACHIEVEMENTS,shopNeededHere} from './engine.mjs';
-import {draw,screenToCell,centerOn,cellTop,TW,TH,dayNight,season,weather,SEASONS,WEATHER} from './render.mjs';
+import {draw,screenToCell,centerOn,cellTop,setRotation,getRotation,TW,TH,dayNight,season,weather,SEASONS,WEATHER} from './render.mjs';
 import {sfx,unlock,settings as audio,saveSettings,startMusic,stopMusic,setMusicMood} from './sound.mjs';
 
 const $=s=>document.querySelector(s);
@@ -10,6 +10,7 @@ const bridge=window.webkit?.messageHandlers?.cfApp;
 document.addEventListener('click',e=>{const a=e.target.closest('a[target="_blank"]');if(a&&bridge){e.preventDefault();try{bridge.postMessage({action:'open',url:a.href});}catch{}}},true);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=n=>Math.floor(n).toLocaleString('de-DE');
+const ROT_KEY='my-city-foundry-rotation';   // Drehung der Karte (nur dieses Gerät)
 let game=null,cam={x:0,y:0,z:1},cur='hand',group='hand',showDirt=false,showTraffic=false,sel=null,preview=null,showNeeds=true,canvas,ctx,W=0,Hh=0,dpr=1;
 
 function load(){try{return restore(localStorage.getItem(SAVE_KEY));}catch{return null;}}
@@ -29,7 +30,7 @@ function renderStart(){document.body.className='startmode';
 // ---------- Stadt ----------
 function startCity(){document.body.className='citymode';
  $('#app').innerHTML=`<canvas id="map"></canvas><header class="top" id="top"></header><div id="panel" class="panel hidden"></div><div class="fab" id="fab"></div><div class="sub hidden" id="sub"></div><nav class="tools" id="tools"></nav>`;
- canvas=$('#map');ctx=canvas.getContext('2d');resize();cam.z=W<600?1.3:1.4;centerOn(cam,game.start.x,game.start.y+1,W,Hh);
+ canvas=$('#map');ctx=canvas.getContext('2d');resize();try{setRotation(+localStorage.getItem(ROT_KEY)||0);}catch{}cam.z=W<600?1.3:1.4;centerOn(cam,game.start.x,game.start.y+1,W,Hh);
  hud();toolbar();fab();bindPointer();requestAnimationFrame(loop);tutShow();}
 // Größe immer frisch messen: In der App ist das Fenster beim Start manchmal noch klein (dann war die Karte nur ein Streifen).
 function size(){const e=document.documentElement;return{w:Math.max(window.innerWidth||0,e.clientWidth||0),h:Math.max(window.innerHeight||0,e.clientHeight||0),d:Math.min(2,window.devicePixelRatio||1)};}
@@ -79,7 +80,9 @@ function savePanel(){const p=$('#panel');delete p.dataset.modal;sel=null;
   <h3 style="margin-top:14px">📥 Spielstand laden</h3><p class="muted small">Code hier einfügen. Achtung: Die Stadt auf diesem Gerät wird dabei ersetzt.</p>
   <textarea id="impcode" rows="3" placeholder="MCF1:…"></textarea><button class="wideb" data-imp>Spielstand laden</button>`;p.classList.remove('hidden');}
 
-function fab(){const f=$('#fab');if(f)f.innerHTML=`<button data-mini title="Übersichtskarte" aria-label="Übersichtskarte">🧭</button>${undoStack.length?'<button data-undo title="Rückgängig" aria-label="Rückgängig">↩️</button>':''}`;}
+// Karte drehen: um die Bildschirmmitte, in 90°-Schritten; die Drehung merkt sich das Gerät (nicht im Spielstand)
+function rotate(k){const c=screenToCell(cam,W/2,Hh/2);setRotation(getRotation()+k);try{localStorage.setItem(ROT_KEY,String(getRotation()));}catch{}centerOn(cam,c.x,c.y,W,Hh);sfx('click');}
+function fab(){const f=$('#fab');if(f)f.innerHTML=`<button data-mini title="Übersichtskarte" aria-label="Übersichtskarte">🧭</button><button data-rot="1" title="Karte nach rechts drehen" aria-label="Karte nach rechts drehen">↻</button><button data-rot="-1" title="Karte nach links drehen" aria-label="Karte nach links drehen">↺</button>${undoStack.length?'<button data-undo title="Rückgängig" aria-label="Rückgängig">↩️</button>':''}`;}
 function envIcon(){const now=Date.now(),dn=clock(now),w=sky(now);return`${audio.daynight&&dn.night>0.5?'🌙':WEATHER[w].icon}<small>${SEASONS[season(now)].icon}</small>`;}
 function toolbar(){setTimeout(()=>{const S=TUT[game?.tut?.step];if(game?.tut&&!game.tut.done&&S?.group)document.querySelector(`[data-group="${S.group}"]`)?.classList.add('pulse');},0);const lv=cityLevel(game);
  $('#tools').innerHTML=GROUPS.map(G=>{const ts=TOOLS.filter(t=>t.group===G.id),open=ts.some(t=>unlocked(game,t.id)),fresh=ts.filter(t=>unlocked(game,t.id)&&!built(game,t.id)&&t.lvl>1&&t.lvl>=lv-1).length;
@@ -88,7 +91,7 @@ function toolbar(){setTimeout(()=>{const S=TUT[game?.tut?.step];if(game?.tut&&!g
  if(ts.length>1){sub.innerHTML=ts.map(t=>{const o=unlocked(game,t.id),done=t.once&&built(game,t.id);return`<button class="${cur===t.id?'on':''} ${o&&!done?'':'locked'}" data-tool="${t.id}"><span>${o?t.icon:'🔒'}</span>${t.name}<small>${!o?'ab Level '+t.lvl:done?'gebaut':t.id==='lanes'?'mehr Spuren':t.id==='land'?fmt(sectorPrice(game)):fmt(t.cost)+(t.size>1?` · ${t.size}×${t.size}`:'')}</small></button>`;}).join('');sub.classList.remove('hidden');}
  else sub.classList.add('hidden');}
 
-function loop(t){if(!game||!canvas)return;{const s=size();if(s.w!==W||s.h!==Hh||s.d!==dpr)resize();}const now=Date.now(),dn=audio.daynight?clock(now):{night:0,dusk:false};draw(ctx,game,cam,{env:{night:dn.night,dusk:dn.dusk,season:season(now),weather:sky(now)},w:W,h:Hh,dpr,sel,preview,t,showNeeds,money:game.money,dirt:showDirt||['zone','zonei','power','airport'].includes(cur),traffic:showTraffic||cur==='lanes',land:cur==='land'});requestAnimationFrame(loop);}
+function loop(t){if(!game||!canvas)return;{const s=size();if(s.w!==W||s.h!==Hh||s.d!==dpr)resize();}const now=Date.now(),dn=audio.daynight?clock(now):{night:0,dusk:false};draw(ctx,game,cam,{env:{night:dn.night,dusk:dn.dusk,season:season(now),weather:sky(now)},w:W,h:Hh,dpr,sel,preview,t,showNeeds,money:game.money,dirt:showDirt||['zone','zonei','power','airport'].includes(cur),traffic:showTraffic||cur==='lanes',land:cur==='land',ghost:['road','lanes','rail'].includes(cur)});requestAnimationFrame(loop);}
 setInterval(()=>{if(!game||!canvas)return;const before=population(game),bj=jobs(game);game=update(game,Date.now());const p=population(game);
  if(p>before)toast('Neue Einwohner sind eingezogen! 🏡');else if(jobs(game)>bj)toast('Neue Arbeitsplätze in der Stadt! 💼');hud();levelUps();eventsModal();achvToasts();tutCheck();setMusicMood(audio.daynight&&clock(Date.now()).night>0.5);if(sel&&!$('#panel').dataset.modal)panel();},1000);
 setInterval(()=>{if(game)save();},5000);
@@ -271,6 +274,7 @@ document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b||
  if('settings'in d){sfx('click');return settings();}
  if('undo'in d)return undo();
  if('mini'in d){sfx('click');return miniPanel();}
+ if('rot'in d)return rotate(+d.rot);
  if(d.aud){audio[d.aud]=!audio[d.aud];saveSettings();if(d.aud==='music'){audio.music?startMusic():stopMusic();}hud();return settings();}
  if('sky'in d){const now=Date.now(),dn=clock(now);return toast(`${SEASONS[season(now)].icon} ${SEASONS[season(now)].name} · ${WEATHER[sky(now)].icon} ${WEATHER[sky(now)].name} · ${audio.daynight?(dn.night>0.5?'🌙 ':'☀️ ')+dn.label:'immer Tag'}`);}
  if(d.ttab){taskTab=d.ttab;return tasks();}

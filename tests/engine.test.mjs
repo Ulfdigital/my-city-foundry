@@ -193,3 +193,8 @@ test('Laden entsteht bei Häusern ohne Laden, auch wenn die Stadt genug Läden h
  g=update(g,T0+1000);g=update(g,T0+60*MIN);
  const shops=[X+2,X+3].filter(x=>tile(g,x,Y+1).t==='shop').length;assert.equal(shops,1,'genau ein Laden für die Häuser');
  assert.ok(covered(g,X,Y+1,'shop'));assert.ok(!shopNeededHere(g,X+3,Y+1));});
+test('Karte drehen: Tippen trifft in jeder Drehung das richtige Feld',async()=>{const R=await import('../js/render.mjs');
+ for(let r=0;r<4;r++){R.setRotation(r);for(const[x,y]of[[0,0],[5,90],[127,3],[64,64],[127,127]]){const cam={x:0,y:0,z:1.3};R.centerOn(cam,x,y,800,600);
+  assert.deepEqual(R.screenToCell(cam,400,600/2),{x,y},`Drehung ${r}, Feld ${x},${y}`);
+  for(const[dx,dy]of[[8,0],[-8,0],[0,5],[0,-5]])assert.deepEqual(R.screenToCell(cam,400+dx,300+dy),{x,y},'auch etwas neben der Mitte');}}
+ R.setRotation(0);});
