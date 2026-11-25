@@ -1,7 +1,7 @@
 // My City Foundry – Spieldaten. Stadtaufbau ab etwa 10 Jahren.
 export const VERSION=1;
 export const SAVE_KEY='my-city-foundry-v1';   // nie ändern – sonst ist der Spielstand weg
-export const BUILD='0.9.2';                    // muss zu package.json und version.json passen (Update-Prüfung in der App)
+export const BUILD='0.9.3';                    // muss zu package.json und version.json passen (Update-Prüfung in der App)
 export const MAP_W=128,MAP_H=128;             // ganze Welt
 export const OLD_MAPS=[40,64];                 // ältere Städte (0.1/0.2: 40×40, 0.3/0.4: 64×64) ziehen in die Mitte der Welt
 // ---------- Gebiete: Welt in 8×8 Gebiete zu je 16×16 Feldern; die Mitte (4×4 Gebiete = 64×64) gehört dir von Anfang an ----------

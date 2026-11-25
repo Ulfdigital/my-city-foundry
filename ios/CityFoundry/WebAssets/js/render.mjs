@@ -183,6 +183,53 @@ function pediment(ctx,cx,cy,hw,hh,z,col){ctx.fillStyle=col;ctx.beginPath();ctx.m
 function columns(ctx,cx,cy,hw,hh,z,n){ctx.fillStyle='#f4f1ea';for(let i=0;i<n;i++){const a=(i+0.5)/n;const px=cx+a*hw,py=cy+hh-a*hh;ctx.fillRect(px-1.5,py-z,3,z);}}
 function turbine(ctx,x,y,t,ph){ctx.strokeStyle='#e8ecef';ctx.lineWidth=2.5;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x,y-46);ctx.stroke();ctx.lineWidth=2;const a=t/500+ph;
  for(let k=0;k<3;k++){const b=a+k*2.094;ctx.beginPath();ctx.moveTo(x,y-46);ctx.lineTo(x+Math.cos(b)*17,y-46+Math.sin(b)*17);ctx.stroke();}ctx.fillStyle='#ccc';ctx.beginPath();ctx.arc(x,y-46,2.5,0,7);ctx.fill();}
+// ---------- Bahnhof: Gleise, Oberleitung, Bahnsteig, Gebäude und richtige Züge (2×2 Felder) ----------
+// a: Richtung der Gleise (eine Iso-Achse), b: quer dazu, beide in Feldern ab der Mitte (−1 … 1), h: Höhe in Pixeln
+function station(ctx,cx,cy,t){
+ const P=(a,b,h=0)=>[cx+(a-b)*TW/2,cy+(a+b)*TH/2-h];
+ const poly=(ps,col)=>{ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(...ps[0]);for(const p of ps.slice(1))ctx.lineTo(...p);ctx.closePath();ctx.fill();};
+ const line=(p,q,col,w)=>{ctx.strokeStyle=col;ctx.lineWidth=w;ctx.beginPath();ctx.moveTo(...p);ctx.lineTo(...q);ctx.stroke();};
+ const boxAB=(a0,a1,b0,b1,h,col,top)=>{poly([P(a0,b1),P(a1,b1),P(a1,b1,h),P(a0,b1,h)],shade(col,0.86));poly([P(a1,b0),P(a1,b1),P(a1,b1,h),P(a1,b0,h)],shade(col,0.72));poly([P(a0,b0,h),P(a1,b0,h),P(a1,b1,h),P(a0,b1,h)],top||shade(col,1.06));};
+ const glow=(f)=>{if(!LIGHTS)return;ctx.globalAlpha=1;f();ctx.globalAlpha=0;};
+ // Gleis: Schotterbett, Holzschwellen, zwei Stahlschienen
+ const track=b=>{poly([P(-1,b-0.14),P(1,b-0.14),P(1,b+0.14),P(-1,b+0.14)],'#8e887d');
+  for(let a=-0.98;a<=0.99;a+=0.085)line(P(a,b-0.1,0.4),P(a,b+0.1,0.4),'#6e5238',1.6);
+  for(const o of[-0.055,0.055]){line(P(-1,b+o,1),P(1,b+o,1),'#4b4f56',1.3);line(P(-1,b+o,1.5),P(1,b+o,1.5),'#d3d6db',0.5);}};
+ const masts=b=>{for(const a of[-0.85,0,0.85]){line(P(a,b-0.2,0),P(a,b-0.2,30),'#7a8088',1.4);line(P(a,b-0.2,29),P(a,b,29),'#7a8088',1);}};
+ const wire=b=>line(P(-1,b,27),P(1,b,27),'rgba(60,60,60,.75)',0.6);
+ // Ein Wagen (oder die Lok) zwischen a0 und a1, außerhalb des Bahnhofs abgeschnitten
+ const car=(A0,A1,b,loco,body,stripe)=>{const a0=Math.max(-1,A0),a1=Math.min(1,A1);if(a1-a0<0.02)return;const w=0.13,H=13,nose=loco&&A1<=1?0.15:0,ab=a1-nose;
+  ctx.fillStyle='#1d1d1f';for(const a of[A0+0.09,A0+0.17,A1-0.17,A1-0.09])if(a>a0&&a<a1){const p=P(a,b+w,1.6);ctx.beginPath();ctx.arc(p[0],p[1],1.4,0,7);ctx.fill();}
+  poly([P(a0,b+w,2),P(ab,b+w,2),P(ab,b+w,H),P(a0,b+w,H)],body);                                    // lange Seite
+  poly([P(a0,b+w,4),P(ab,b+w,4),P(ab,b+w,5.6),P(a0,b+w,5.6)],stripe);                              // Zierstreifen
+  if(nose){poly([P(ab,b+w,2),P(a1,b+w,2),P(a1,b+w,H*0.42),P(ab,b+w,H)],body);poly([P(ab,b+w,4),P(a1,b+w,4),P(a1,b+w,5.6),P(ab,b+w,5.6)],stripe);
+   poly([P(a1,b-w,2),P(a1,b+w,2),P(a1,b+w,H*0.42),P(a1,b-w,H*0.42)],shade(body,0.78));             // Front
+   poly([P(ab,b-w,H),P(a1,b-w,H*0.42),P(a1,b+w,H*0.42),P(ab,b+w,H)],'#22313f');                     // schräge Frontscheibe
+   ctx.fillStyle='#fff6c8';for(const o of[-0.08,0.08]){const p=P(a1,b+o,3.4);ctx.beginPath();ctx.arc(p[0],p[1],0.9,0,7);ctx.fill();}
+   glow(()=>{const p=P(a1+0.25,b,2),g2=ctx.createRadialGradient(p[0],p[1],0,p[0],p[1],14);g2.addColorStop(0,'rgba(255,240,180,.55)');g2.addColorStop(1,'rgba(255,240,180,0)');ctx.fillStyle=g2;ctx.beginPath();ctx.arc(p[0],p[1],14,0,7);ctx.fill();});}
+  else poly([P(a1,b-w,2),P(a1,b+w,2),P(a1,b+w,H),P(a1,b-w,H)],shade(body,0.78));                    // Wagenende
+  poly([P(a0,b-w,H),P(ab,b-w,H),P(ab,b+w,H),P(a0,b+w,H)],'#aeb5bc');                                 // Dach
+  // Fenster und Türen
+  const win=(p0,p1,h0,h1,col)=>{if(p1<=a0||p0>=ab)return;p0=Math.max(a0,p0);p1=Math.min(ab,p1);poly([P(p0,b+w,h0),P(p1,b+w,h0),P(p1,b+w,h1),P(p0,b+w,h1)],col);
+   glow(()=>poly([P(p0,b+w,h0),P(p1,b+w,h0),P(p1,b+w,h1),P(p0,b+w,h1)],'#ffd877'));};
+  if(loco){win(A1-nose-0.14,A1-nose-0.04,7.5,11,'#3d5a73');line(P((A0+A1)/2,b,H),P((A0+A1)/2+0.05,b,27),'#555',0.8);}   // Führerstand, Stromabnehmer
+  else{win(A0+0.05,A0+0.1,2.5,11,shade(body,0.7));win(A1-0.1,A1-0.05,2.5,11,shade(body,0.7));for(let a=A0+0.14;a<A1-0.15;a+=0.085)win(a,a+0.06,7.5,11,'#3d5a73');}};
+ // Zug fährt ein, hält am Bahnsteig und fährt weiter. Kopf (Lok) vorne in Fahrtrichtung +a
+ const trainAt=(b,off,body,stripe)=>{const T=16000,p=(((t+off)%T)+T)%T/T,stop=0.95;
+  const head=p<0.4?-1+(stop+1)*(1-(1-p/0.4)**2):p<0.65?stop:stop+2.1*((p-0.65)/0.35)**2;
+  const L=[0.6,0.56,0.56];let a1=head;for(let i=0;i<L.length;i++){const a0=a1-L[i];L[i]={a0,a1};a1=a0-0.04;}
+  for(let i=L.length-1;i>=0;i--)car(L[i].a0,L[i].a1,b,i===0,body,stripe);};
+ // Bahnhofsgebäude hinten
+ boxAB(-0.8,0.55,-0.98,-0.55,26,'#e9dcc2','#b5523a');
+ for(let k=0;k<5;k++){const a=-0.7+k*0.25;poly([P(a,-0.55,6),P(a+0.12,-0.55,6),P(a+0.12,-0.55,18),P(a,-0.55,18)],'#5c7ea0');glow(()=>poly([P(a,-0.55,6),P(a+0.12,-0.55,6),P(a+0.12,-0.55,18),P(a,-0.55,18)],'#ffd877'));}
+ {const p=P(-0.12,-0.55,22);ctx.fillStyle='#fff';ctx.beginPath();ctx.ellipse(p[0],p[1]+1,3.4,3,0,0,7);ctx.fill();ctx.strokeStyle='#333';ctx.lineWidth=0.7;ctx.stroke();line([p[0],p[1]+1],[p[0],p[1]-1.2],'#333',0.6);line([p[0],p[1]+1],[p[0]+1.5,p[1]+1.6],'#333',0.6);}
+ // hinteres Gleis mit Zug, dann Bahnsteig mit Dach, dann vorderes Gleis mit Zug
+ masts(-0.18);track(-0.18);trainAt(-0.18,0,'#f4f6f8','#d0312d');wire(-0.18);
+ boxAB(-0.95,0.95,0,0.3,3,'#d6d0c2','#e2ddd2');line(P(-0.95,0.03,3.1),P(0.95,0.03,3.1),'#f1c40f',1);line(P(-0.95,0.27,3.1),P(0.95,0.27,3.1),'#f1c40f',1);
+ for(const a of[-0.6,0,0.6])line(P(a,0.15,3),P(a,0.15,21),'#5a6470',1.4);
+ poly([P(-0.8,0.03,21),P(0.8,0.03,21),P(0.8,0.3,21),P(-0.8,0.3,21)],'#6a7886');poly([P(-0.8,0.3,19),P(0.8,0.3,19),P(0.8,0.3,21),P(-0.8,0.3,21)],'#4d5965');
+ masts(0.58);track(0.58);trainAt(0.58,8000,'#d0312d','#f4f6f8');wire(0.58);
+ label(ctx,P(-0.12,-0.76,0)[0],P(-0.12,-0.76,40)[1],'🚉',14);}
 function special(ctx,id,cx,cy,n,t,big){const hw=n*TW/2*0.82,hh=n*TH/2*0.82;if(big){ctx.save();ctx.translate(cx,cy);ctx.scale(1.15,1.15);ctx.translate(-cx,-cy);}try{
  switch(id){
   case'school':box(ctx,cx,cy,20,10,18,'#f3d36b');windows(ctx,cx,cy,20,10,3,15,2,3,'#5c7ea0');pyramidRoof(ctx,cx,cy,20,10,18,10,'#b5523a');ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(cx+10,cy-10,3,0,7);ctx.fill();flag(ctx,cx-14,cy-18,'#3f7ad8');break;
@@ -190,7 +237,7 @@ function special(ctx,id,cx,cy,n,t,big){const hw=n*TW/2*0.82,hh=n*TH/2*0.82;if(bi
   case'police':box(ctx,cx,cy,19,9.5,20,'#3f6fb8','#5a86cc');windows(ctx,cx,cy,19,9.5,3,17,2,3,'#cfe0f3');ctx.fillStyle=Math.floor(t/400)%2?'#ff4a3a':'#3a7aff';ctx.fillRect(cx-3,cy-25,6,3);break;
   case'bus':ctx.fillStyle='#8a8f96';for(const[a,b]of[[-16,-2],[14,-2],[-2,6]])ctx.fillRect(cx+a,cy+b-16,2,16);box(ctx,cx,cy-16,20,10,2,'#5d6b7a');ctx.fillStyle='#f2c230';ctx.fillRect(cx-12,cy-8,22,8);ctx.fillStyle='#8ec3e6';ctx.fillRect(cx-10,cy-7,18,3);break;
   case'hospital':box(ctx,cx,cy,hw*0.8,hh*0.8,44,'#f4f6f8','#e3e8ec');windows(ctx,cx,cy,hw*0.8,hh*0.8,3,42,5,5,'#8cc0dc');ctx.fillStyle='#e0322b';ctx.fillRect(cx-3,cy-60,6,16);ctx.fillRect(cx-8,cy-55,16,6);break;
-  case'train':{box(ctx,cx,cy,hw,hh*0.6,5,'#b9b4aa');const ride=((t/12000)%1),off=ride<0.4?0:ride<0.7?(ride-0.4)/0.3*1.6:-1.6+(ride-0.7)/0.3*1.6;for(let i=0;i<3;i++){const a=Math.max(-1.2,Math.min(1.2,-0.6+i*0.45+off));if(Math.abs(a)>0.95)continue;box(ctx,cx+a*hw,cy+a*hh*0.5,10,5,9,i?'#c0392b':'#e74c3c');}ctx.fillStyle='rgba(90,100,110,.85)';ctx.beginPath();ctx.moveTo(cx-hw,cy-22);ctx.lineTo(cx,cy-22+hh*0.6);ctx.lineTo(cx+hw,cy-22);ctx.lineTo(cx,cy-22-hh*0.6);ctx.fill();label(ctx,cx,cy-30,'🚉',14);break;}
+  case'train':station(ctx,cx,cy,t);break;
   case'uni':box(ctx,cx,cy,hw*0.8,hh*0.8,26,'#efe6d2');columns(ctx,cx,cy,hw*0.8,hh*0.8,24,6);pediment(ctx,cx,cy,hw*0.8,hh*0.8,26,'#e2d6bb');ctx.fillStyle='#8fb7c9';ctx.beginPath();ctx.arc(cx,cy-40,10,Math.PI,0);ctx.fill();label(ctx,cx,cy-56,'🎓',13);break;
   case'sport':ctx.strokeStyle='#fff';ctx.lineWidth=1.5;diamond(ctx,cx,cy,hw*0.8,hh*0.8);ctx.stroke();ctx.beginPath();ctx.moveTo(cx-hw*0.4,cy-hh*0.4);ctx.lineTo(cx+hw*0.4,cy+hh*0.4);ctx.stroke();ctx.beginPath();ctx.ellipse(cx,cy,8,4,0,0,7);ctx.stroke();box(ctx,cx+hw*0.55,cy-hh*0.55,14,7,8,'#9aa4ad');label(ctx,cx-6,cy+2,'⚽',10);break;
   case'pool':ctx.fillStyle='#e9e4d8';diamond(ctx,cx,cy,hw,hh);ctx.fill();ctx.fillStyle='#4fb6e8';diamond(ctx,cx,cy+2,hw*0.6,hh*0.6);ctx.fill();ctx.strokeStyle='rgba(255,255,255,.7)';ctx.lineWidth=1;for(let k=-1;k<=1;k++){ctx.beginPath();ctx.moveTo(cx-hw*0.3+k*8,cy-hh*0.3+k*4+2);ctx.lineTo(cx+hw*0.3+k*8,cy+hh*0.3+k*4+2);ctx.stroke();}box(ctx,cx-hw*0.6,cy-hh*0.3,12,6,12,'#f2f2f2');label(ctx,cx+14,cy-14,'⛱️',12);break;
