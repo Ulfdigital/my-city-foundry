@@ -1,7 +1,7 @@
 // My City Foundry – Spieldaten. Stadtaufbau ab etwa 10 Jahren.
 export const VERSION=1;
 export const SAVE_KEY='my-city-foundry-v1';   // nie ändern – sonst ist der Spielstand weg
-export const BUILD='0.9.3';                    // muss zu package.json und version.json passen (Update-Prüfung in der App)
+export const BUILD='0.10.0';                    // muss zu package.json und version.json passen (Update-Prüfung in der App)
 export const MAP_W=128,MAP_H=128;             // ganze Welt
 export const OLD_MAPS=[40,64];                 // ältere Städte (0.1/0.2: 40×40, 0.3/0.4: 64×64) ziehen in die Mitte der Welt
 // ---------- Gebiete: Welt in 8×8 Gebiete zu je 16×16 Feldern; die Mitte (4×4 Gebiete = 64×64) gehört dir von Anfang an ----------
@@ -34,6 +34,7 @@ export const GROUPS=[
 export const TOOLS=[
  {id:'hand',group:'hand',name:'Ansehen',icon:'✋',lvl:1},
  {id:'road',group:'road',name:'Straße',icon:'🛣️',cost:10,lvl:1,text:'Tippen oder ziehen. Auf Fels kostet sie das Dreifache.'},
+ {id:'rail',group:'road',name:'Schiene',icon:'🚆',cost:40,lvl:16,text:'Tippen oder ziehen. Verbinde Bahnhöfe – die Züge fahren von Bahnhof zu Bahnhof. Gleise kommen an den Enden des Bahnhofs an. Über eine einspurige Straße entsteht ein Bahnübergang.'},
  {id:'lanes',group:'road',name:'Straße ausbauen',icon:'🛤️',lvl:6,text:'Mehr Spuren für mehr Verkehr: tippe oder ziehe über eine Straße.'},
  {id:'land',group:'mine',name:'Land kaufen',icon:'🗺️',lvl:12,text:'Kaufe Gebiete neben deiner Stadt – für Dörfer, Bergbau und mehr Platz.'},
  {id:'bulldoze',group:'bulldoze',name:'Abreißen',icon:'🚜',cost:5,lvl:1},

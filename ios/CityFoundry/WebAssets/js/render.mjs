@@ -1,6 +1,6 @@
 // My City Foundry – Zeichnen der Stadt in schräger Draufsicht (isometrisch) auf einem Canvas.
 import {MAP_W,MAP_H,LEVELS,NEEDS,BIZ,tool,SECTOR,SECTORS,FEATURES,NEIGHBORS,GOODS} from './data.mjs';
-import {tile,missing,maxLevel,upgradeCost,covered,owns,canBuy,sectorPrice,info,features,wanted} from './engine.mjs';
+import {tile,idx,missing,maxLevel,upgradeCost,covered,owns,canBuy,sectorPrice,info,features,wanted} from './engine.mjs';
 
 export const TW=64,TH=32;
 // ---------- Tag und Nacht, Jahreszeiten, Wetter ----------
@@ -54,7 +54,7 @@ function ground(ctx,c,x,y,cx,cy,t){
  // Bodenfarbe: jede Art genau einmal festlegen (Straße grau, Wasser blau, Fels grau, Zonen farbig, sonst Gras je Jahreszeit)
  if(c.t==='water')col='#4fa3d8';
  else if(c.t==='road')col=['','#8d9096','#7d8086','#6c6f75','#55585e'][c.lanes||1];
- else if(c.t==='rock'||(tool(c.t)?.onRock))col=v<0.5?'#9c9a94':'#a6a39c';
+ else if(c.t==='rock'||(tool(c.t)?.onRock)||(c.t==='rail'&&c.rock))col=v<0.5?'#9c9a94':'#a6a39c';
  else if(c.t==='zone')col='#a9d98f';else if(c.t==='zonec')col='#a9cbe8';else if(c.t==='zonei')col='#e6d98f';
  else if(c.t==='park')col='#6fbf5a';else if(['sport','zoo','themepark','wind','ferris','naturepark'].includes(c.t))col='#74bf5c';
  else if(c.t==='ski')col='#eef5fb';else if(c.t==='airport')col='#b9bcb6';else if(tool(c.t)?.size)col='#cfcfc8';
@@ -71,11 +71,11 @@ function ground(ctx,c,x,y,cx,cy,t){
 function roadMarks(ctx,g,x,y,cx,cy,c,t,cars){const n=[[1,0],[-1,0],[0,1],[0,-1]].map(([dx,dy])=>tile(g,x+dx,y+dy)?.t==='road');
  const ends=[{x:cx+TW/4,y:cy+TH/4},{x:cx-TW/4,y:cy-TH/4},{x:cx-TW/4,y:cy+TH/4},{x:cx+TW/4,y:cy-TH/4}],L=c.lanes||1;
  ctx.strokeStyle=L>=4?'rgba(255,214,80,.9)':'rgba(255,255,255,.85)';ctx.lineWidth=L>=2?1.1:1.4;ctx.setLineDash(L>=2?[]:[4,4]);
- let any=false;n.forEach((on,i)=>{if(!on)return;any=true;const e=ends[i];
+ let any=false;n.forEach((on,i)=>{if(!on)return;any=true;if(c.rail)return;const e=ends[i];
   if(L>=2){const px=(e.y-cy),py=-(e.x-cx),len=Math.hypot(px,py)||1;for(const o of[-1.2,1.2]){ctx.beginPath();ctx.moveTo(cx+px/len*o,cy+py/len*o);ctx.lineTo(e.x+px/len*o,e.y+py/len*o);ctx.stroke();}
    if(L>=3){ctx.save();ctx.setLineDash([3,4]);ctx.strokeStyle='rgba(255,255,255,.6)';for(const o of[-5,5]){ctx.beginPath();ctx.moveTo(cx+px/len*o,cy+py/len*o);ctx.lineTo(e.x+px/len*o,e.y+py/len*o);ctx.stroke();}ctx.restore();}}
   else{ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(e.x,e.y);ctx.stroke();}});
- ctx.setLineDash([]);if(!any){ctx.fillStyle='rgba(255,255,255,.7)';ctx.fillRect(cx-2,cy-1,4,2);}
+ ctx.setLineDash([]);if(!any&&!c.rail){ctx.fillStyle='rgba(255,255,255,.7)';ctx.fillRect(cx-2,cy-1,4,2);}
  // Fußgänger auf dem Gehweg neben Häusern (tagsüber)
  if(!LIGHTS&&ZOOM>0.8&&NIGHT<0.6){const h0=hash(x,y);if(h0<0.45&&[[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dy])=>{const o=tile(g,x+dx,y+dy)?.t;return o==='house'||o==='shop'||o==='park';})){
   const A={x:cx-TW/2+5,y:cy},B={x:cx,y:cy-TH/2+2.5},C={x:cx+TW/2-5,y:cy},D={x:cx,y:cy+TH/2-2.5},edges=[[A,B],[B,C],[C,D],[D,A]];
@@ -84,7 +84,7 @@ function roadMarks(ctx,g,x,y,cx,cy,c,t,cars){const n=[[1,0],[-1,0],[0,1],[0,-1]]
    ctx.fillStyle=['#e74c3c','#3498db','#f1c40f','#9b59b6','#1abc9c'][(Math.floor(h0*100)+k)%5];ctx.fillRect(px-1,py-5.5,2,3.2);ctx.fillStyle='#f0c8a0';ctx.beginPath();ctx.arc(px,py-6.6,1.1,0,7);ctx.fill();}}}
  // Ampeln an Kreuzungen (3 oder 4 Straßen)
  const crossing=n.filter(Boolean).length>=3;if(crossing)lights(ctx,cx,cy,x,y,t);
- else if((x*3+y*5)%4===0)lamp(ctx,cx,cy,n);
+ else if((x*3+y*5)%4===0&&!c.rail)lamp(ctx,cx,cy,n);
  // Fahrzeuge: je mehr Verkehr, desto mehr. Vor roter Ampel bleiben sie stehen und fahren bei Grün weiter.
  if(cars&&any){const dirs=n.map((on,i)=>on?i:-1).filter(i=>i>=0),k=Math.min(6,Math.round(cars*4));
   for(let m=0;m<k;m++){const d=dirs[m%dirs.length],e=ends[d],back=m%2,axis=d<2?0:1;
@@ -183,53 +183,136 @@ function pediment(ctx,cx,cy,hw,hh,z,col){ctx.fillStyle=col;ctx.beginPath();ctx.m
 function columns(ctx,cx,cy,hw,hh,z,n){ctx.fillStyle='#f4f1ea';for(let i=0;i<n;i++){const a=(i+0.5)/n;const px=cx+a*hw,py=cy+hh-a*hh;ctx.fillRect(px-1.5,py-z,3,z);}}
 function turbine(ctx,x,y,t,ph){ctx.strokeStyle='#e8ecef';ctx.lineWidth=2.5;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x,y-46);ctx.stroke();ctx.lineWidth=2;const a=t/500+ph;
  for(let k=0;k<3;k++){const b=a+k*2.094;ctx.beginPath();ctx.moveTo(x,y-46);ctx.lineTo(x+Math.cos(b)*17,y-46+Math.sin(b)*17);ctx.stroke();}ctx.fillStyle='#ccc';ctx.beginPath();ctx.arc(x,y-46,2.5,0,7);ctx.fill();}
-// ---------- Bahnhof: Gleise, Oberleitung, Bahnsteig, Gebäude und richtige Züge (2×2 Felder) ----------
-// a: Richtung der Gleise (eine Iso-Achse), b: quer dazu, beide in Feldern ab der Mitte (−1 … 1), h: Höhe in Pixeln
-function station(ctx,cx,cy,t){
- const P=(a,b,h=0)=>[cx+(a-b)*TW/2,cy+(a+b)*TH/2-h];
- const poly=(ps,col)=>{ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(...ps[0]);for(const p of ps.slice(1))ctx.lineTo(...p);ctx.closePath();ctx.fill();};
- const line=(p,q,col,w)=>{ctx.strokeStyle=col;ctx.lineWidth=w;ctx.beginPath();ctx.moveTo(...p);ctx.lineTo(...q);ctx.stroke();};
+// ---------- Schienennetz: Gleise, Bahnübergänge und Züge, die von Bahnhof zu Bahnhof fahren ----------
+// Alles in Feld-Koordinaten der Welt (x, y als Kommazahlen); W(p,h) rechnet in Bildschirm-Punkte um
+const W=(p,h=0)=>[(p[0]-p[1])*TW/2,(p[0]+p[1])*TH/2-h];
+const fillPoly=(ctx,ps,col)=>{ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(...ps[0]);for(const p of ps.slice(1))ctx.lineTo(...p);ctx.closePath();ctx.fill();};
+const strokeLine=(ctx,ps,col,w)=>{ctx.strokeStyle=col;ctx.lineWidth=w;ctx.beginPath();ctx.moveTo(...ps[0]);for(const p of ps.slice(1))ctx.lineTo(...p);ctx.stroke();};
+const glowOn=f=>{if(!LIGHTS)return;ctx0.globalAlpha=1;f();ctx0.globalAlpha=0;};let ctx0=null;
+const isRail=c=>!!c&&(c.t==='rail'||(c.t==='road'&&c.rail));
+const DIRS=[[1,0],[-1,0],[0,1],[0,-1]];
+// Hängen zwei Nachbarfelder zusammen? Bahnhöfe nur an ihren schmalen Enden (in x-Richtung, dort liegen die Gleise)
+function linked(g,x,y,dx,dy){const a=tile(g,x,y),b=tile(g,x+dx,y+dy);if(!a||!b)return false;const sa=a.t==='train',sb=b.t==='train';
+ if(!(sa||isRail(a))||!(sb||isRail(b)))return false;return!((sa||sb)&&dy!==0);}
+const conns=(g,x,y)=>DIRS.filter(([dx,dy])=>linked(g,x,y,dx,dy));
+const bez=(a,c,b,s)=>[(1-s)**2*a[0]+2*(1-s)*s*c[0]+s*s*b[0],(1-s)**2*a[1]+2*(1-s)*s*c[1]+s*s*b[1]];
+// Gleisstücke eines Feldes als Linien (gerade, Kurve, Kreuzung oder Prellbock)
+function railPieces(g,x,y){const C=[x+0.5,y+0.5],E=d=>[C[0]+d[0]*0.5,C[1]+d[1]*0.5],k=conns(g,x,y);
+ if(!k.length)return{pieces:[[E([-1,0]),E([1,0])]],ends:[]};
+ if(k.length===1){const d=k[0];return{pieces:[[E(d),[C[0]-d[0]*0.4,C[1]-d[1]*0.4]]],ends:[[[C[0]-d[0]*0.36,C[1]-d[1]*0.36],d]]};}
+ if(k.length===2){const[a,b]=k;if(a[0]===-b[0]&&a[1]===-b[1])return{pieces:[[E(a),E(b)]],ends:[]};const ps=[];for(let i=0;i<=8;i++)ps.push(bez(E(a),C,E(b),i/8));return{pieces:[ps],ends:[]};}
+ return{pieces:k.map(d=>[E(d),C]),ends:[]};}
+// Linie in gleich lange Schritte teilen (für Schwellen), mit Richtung quer zur Linie
+function resample(ps,step){const out=[];let carry=0;for(let i=0;i<ps.length-1;i++){const a=ps[i],b=ps[i+1],L=Math.hypot(b[0]-a[0],b[1]-a[1]);if(!L)continue;const n=[-(b[1]-a[1])/L,(b[0]-a[0])/L];
+  for(let s=carry;s<=L;s+=step)out.push({p:[a[0]+(b[0]-a[0])*s/L,a[1]+(b[1]-a[1])*s/L],n});carry=(carry-L)%step;if(carry<0)carry+=step;}return out;}
+function offsetLine(ps,o){return ps.map((p,i)=>{const a=ps[Math.max(0,i-1)],b=ps[Math.min(ps.length-1,i+1)],L=Math.hypot(b[0]-a[0],b[1]-a[1])||1;return[p[0]-(b[1]-a[1])/L*o,p[1]+(b[0]-a[0])/L*o];});}
+// Ein Gleis zeichnen: Schotterbett, Holzschwellen, zwei Stahlschienen
+function drawTrack(ctx,ps,ballast=true){
+ if(ballast){const l=offsetLine(ps,0.14),r=offsetLine(ps,-0.14);fillPoly(ctx,[...l,...r.reverse()].map(p=>W(p)),'#8e887d');}
+ for(const{p,n}of resample(ps,0.085))strokeLine(ctx,[W([p[0]+n[0]*0.1,p[1]+n[1]*0.1],0.4),W([p[0]-n[0]*0.1,p[1]-n[1]*0.1],0.4)],ballast?'#6e5238':'#5d5f63',1.6);
+ for(const o of[-0.055,0.055]){const r=offsetLine(ps,o);strokeLine(ctx,r.map(p=>W(p,1)),'#4b4f56',1.3);strokeLine(ctx,r.map(p=>W(p,1.5)),'#d3d6db',0.5);}}
+function railTile(ctx,g,x,y,c){const{pieces,ends}=railPieces(g,x,y);for(const ps of pieces)drawTrack(ctx,ps,c.t!=='road');
+ for(const[p,d]of ends){const n=[-d[1],d[0]],a=W([p[0]+n[0]*0.12,p[1]+n[1]*0.12],3),b=W([p[0]-n[0]*0.12,p[1]-n[1]*0.12],3);strokeLine(ctx,[a,b],'#c0392b',3);strokeLine(ctx,[[a[0],a[1]-1],[b[0],b[1]-1]],'#f4f6f8',0.8);}   // Prellbock
+ if(c.t==='road'){const q=W([x+0.12,y+0.12]);strokeLine(ctx,[q,[q[0],q[1]-13]],'#666',1);                // Andreaskreuz am Bahnübergang
+  for(const s of[1,-1])strokeLine(ctx,[[q[0]-4,q[1]-13-s*2.5],[q[0]+4,q[1]-13+s*2.5]],'#d0312d',1.6);}}
+
+// Ein Wagen von A nach B (Feld-Koordinaten). noseA/noseB: Lok-Front an diesem Ende
+function railcar(ctx,A,B,noseA,noseB,body,stripe){const L=Math.hypot(B[0]-A[0],B[1]-A[1]);if(L<0.03)return;
+ const d=[(B[0]-A[0])/L,(B[1]-A[1])/L],w=0.13,H=13;let n=[-d[1],d[0]];if(n[0]+n[1]<0)n=[-n[0],-n[1]];   // n: die Seite, die zu uns zeigt
+ const at=(s,o,h)=>W([A[0]+d[0]*s+n[0]*o,A[1]+d[1]*s+n[1]*o],h),nA=noseA?0.15:0,nB=noseB?0.15:0,s0=nA,s1=L-nB,endB=d[0]+d[1]>0;
+ ctx.fillStyle='#1d1d1f';for(const s of[0.09,0.17,L-0.17,L-0.09])if(s>0&&s<L){const p=at(s,w,1.6);ctx.beginPath();ctx.arc(p[0],p[1],1.4,0,7);ctx.fill();}
+ fillPoly(ctx,[at(s0,w,2),at(s1,w,2),at(s1,w,H),at(s0,w,H)],body);
+ if(nB)fillPoly(ctx,[at(s1,w,2),at(L,w,2),at(L,w,H*0.42),at(s1,w,H)],body);
+ if(nA)fillPoly(ctx,[at(0,w,2),at(s0,w,2),at(s0,w,H),at(0,w,H*0.42)],body);
+ fillPoly(ctx,[at(0,w,4),at(L,w,4),at(L,w,5.6),at(0,w,5.6)],stripe);                                    // Zierstreifen
+ const eh=(endB?nB:nA)?H*0.42:H,es=endB?L:0;fillPoly(ctx,[at(es,-w,2),at(es,w,2),at(es,w,eh),at(es,-w,eh)],shade(body,0.78));   // sichtbares Ende
+ fillPoly(ctx,[at(s0,-w,H),at(s1,-w,H),at(s1,w,H),at(s0,w,H)],'#aeb5bc');                                // Dach
+ if(nB)fillPoly(ctx,[at(s1,-w,H),at(L,-w,H*0.42),at(L,w,H*0.42),at(s1,w,H)],endB?'#22313f':shade(body,0.9));
+ if(nA)fillPoly(ctx,[at(s0,-w,H),at(0,-w,H*0.42),at(0,w,H*0.42),at(s0,w,H)],endB?shade(body,0.9):'#22313f');
+ if(endB?nB:nA){ctx.fillStyle='#fff6c8';for(const o of[-0.08,0.08]){const p=at(es,o,3.4);ctx.beginPath();ctx.arc(p[0],p[1],0.9,0,7);ctx.fill();}
+  glowOn(()=>{const p=W([A[0]+d[0]*(endB?L+0.25:-0.25),A[1]+d[1]*(endB?L+0.25:-0.25)],2),g2=ctx.createRadialGradient(p[0],p[1],0,p[0],p[1],14);g2.addColorStop(0,'rgba(255,240,180,.55)');g2.addColorStop(1,'rgba(255,240,180,0)');ctx.fillStyle=g2;ctx.beginPath();ctx.arc(p[0],p[1],14,0,7);ctx.fill();});}
+ const win=(p0,p1,h0,h1,col)=>{p0=Math.max(s0,p0);p1=Math.min(s1,p1);if(p1<=p0)return;const q=[at(p0,w,h0),at(p1,w,h0),at(p1,w,h1),at(p0,w,h1)];fillPoly(ctx,q,col);glowOn(()=>fillPoly(ctx,q,'#ffd877'));};
+ if(nA||nB){if(nB)win(s1-0.12,s1-0.03,7.5,11,'#3d5a73');if(nA)win(s0+0.03,s0+0.12,7.5,11,'#3d5a73');for(let s=s0+0.17;s<s1-0.17;s+=0.09)win(s,s+0.055,7.5,11,'#3d5a73');
+  if(!LIGHTS)strokeLine(ctx,[at(L/2,0,H),at(L/2+0.05,0,27)],'#555',0.8);}                                   // Stromabnehmer
+ else{win(0.05,0.1,2.5,11,shade(body,0.7));win(L-0.1,L-0.05,2.5,11,shade(body,0.7));for(let s=0.14;s<L-0.15;s+=0.085)win(s,s+0.06,7.5,11,'#3d5a73');}}
+// Zug aus drei Teilen (Lok vorne und hinten, Wagen dazwischen) – so kann er an jedem Bahnhof wenden
+const TRAIN_CARS=3,CAR_LEN=0.58,CAR_GAP=0.04,TRAIN_LEN=TRAIN_CARS*CAR_LEN+(TRAIN_CARS-1)*CAR_GAP;
+const TRAIN_COLORS=[['#f4f6f8','#d0312d'],['#d0312d','#f4f6f8'],['#2f6fb0','#f1c40f'],['#27ae60','#f4f6f8']];
+
+// Fahrpläne: je zusammenhängendes Netz mit Bahnhof ein Zug, der alle Bahnhöfe nacheinander anfährt und zurück.
+// Bei nur einem Bahnhof fährt er bis zum Ende der Strecke (Prellbock) und zurück.
+const netCache=new WeakMap();
+export function railNet(g){const hit=netCache.get(g);if(hit&&hit.rev===(g.rev||0))return hit.v;
+ const N=MAP_W*MAP_H,st=[],v={tours:[],used:new Set()};
+ for(let i=0;i<N;i++){const c=g.tiles[i];if(c.t==='train'&&c.rx===i%MAP_W&&c.ry===((i/MAP_W)|0))st.push({x:c.rx,y:c.ry});}
+ const row=(S,r)=>[idx(S.x,r),idx(S.x+1,r)],key=S=>idx(S.x,S.y);
+ const bfs=src=>{const dist=new Int32Array(N).fill(-1),prev=new Int32Array(N).fill(-1),q=[...src];for(const s of src)dist[s]=0;
+  for(let h=0;h<q.length;h++){const i=q[h],x=i%MAP_W,y=(i/MAP_W)|0;for(const[dx,dy]of DIRS){if(!linked(g,x,y,dx,dy))continue;const j=idx(x+dx,y+dy);if(dist[j]>=0)continue;dist[j]=dist[i]+1;prev[j]=i;q.push(j);}}return{dist,prev};};
+ const done=new Set();
+ for(const S0 of st){if(done.has(key(S0)))continue;done.add(key(S0));let src=[...row(S0,S0.y),...row(S0,S0.y+1)],cur=S0;const legs=[];
+  for(let guard=0;guard<16;guard++){const B=bfs(src);let best=-1,bd=1e9;
+   for(let i=0;i<N;i++){if(B.dist[i]<=0)continue;const c=g.tiles[i];if(c.t!=='train')continue;const k=idx(c.rx,c.ry);if(done.has(k)||k===key(cur))continue;if(B.dist[i]<bd){bd=B.dist[i];best=i;}}
+   if(best<0){if(!legs.length){let far=-1,fd=0;for(let i=0;i<N;i++)if(B.dist[i]>fd&&isRail(g.tiles[i])&&conns(g,i%MAP_W,(i/MAP_W)|0).length===1){fd=B.dist[i];far=i;}
+     const l=far>=0&&makeLeg(g,B.prev,far,false);if(l)legs.push(l);}break;}
+   const c=g.tiles[best],T={x:c.rx,y:c.ry};done.add(key(T));const l=makeLeg(g,B.prev,best,true);if(!l)break;legs.push(l);src=row(T,(best/MAP_W)|0);cur=T;}
+  if(!legs.length)continue;
+  for(const l of legs)for(const i of l.cells){const c=g.tiles[i];if(c.t==='train')for(const j of row({x:c.rx},(i/MAP_W)|0))v.used.add(j);}
+  const back=legs.slice().reverse().map(l=>leg(l.pts.slice().reverse(),true,l.cells));
+  const all=[...legs,...back];let T0=0;for(const l of all){l.start=T0;T0+=l.travel+l.wait;}
+  v.tours.push({legs:all,period:T0,colors:TRAIN_COLORS[v.tours.length%TRAIN_COLORS.length]});}
+ netCache.set(g,{rev:g.rev||0,v});return v;}
+function makeLeg(g,prev,end,toStation){const cells=[];for(let i=end;i>=0;i=prev[i])cells.unshift(i);const n=cells.length;if(n<2)return null;
+ const C=i=>[i%MAP_W+0.5,((i/MAP_W)|0)+0.5],dir=(a,b)=>[b%MAP_W-a%MAP_W,((b/MAP_W)|0)-((a/MAP_W)|0)],P=[];
+ const c0=cells[0],t0=g.tiles[c0],d0=dir(c0,cells[1]);P.push([d0[0]>0?t0.rx:t0.rx+2,C(c0)[1]]);           // Start: hinteres Ende des Bahnhofsgleises
+ for(let k=0;k<n;k++){const i=cells[k],p=C(i);
+  if(k>0&&k<n-1&&g.tiles[i].t!=='train'){const a=dir(cells[k-1],i),b=dir(i,cells[k+1]);
+   if(a[0]*b[0]+a[1]*b[1]===0&&conns(g,i%MAP_W,(i/MAP_W)|0).length===2){const E1=[p[0]-a[0]*0.5,p[1]-a[1]*0.5],E2=[p[0]+b[0]*0.5,p[1]+b[1]*0.5];for(let s=0;s<=8;s++)P.push(bez(E1,p,E2,s/8));continue;}}
+  P.push(p);}
+ const cn=cells[n-1],tn=g.tiles[cn],dn=dir(cells[n-2],cn);
+ if(toStation)P.push([dn[0]>0?tn.rx+2:tn.rx,C(cn)[1]]);else{const p=C(cn);P.push([p[0]+dn[0]*0.4,p[1]+dn[1]*0.4]);}
+ return leg(P,toStation,cells);}
+function leg(pts,toStation,cells){const cum=[0];for(let i=1;i<pts.length;i++)cum.push(cum[i-1]+Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]));
+ const len=cum[cum.length-1],s0=TRAIN_LEN+0.08,s1=Math.max(s0,len-(toStation?0.08:0.1));
+ return{pts,cum,len,cells,s0,s1,travel:Math.max(2500,(s1-s0)/1.4*1000+1500),wait:toStation?4500:2500};}
+function pointAt(l,s){s=Math.max(0,Math.min(l.len,s));let i=1;while(i<l.cum.length-1&&l.cum[i]<s)i++;const a=l.pts[i-1],b=l.pts[i],L=l.cum[i]-l.cum[i-1]||1,f=(s-l.cum[i-1])/L;return[a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f];}
+// Alle Wagen dieses Bildes: nach Feld sortiert; Wagen im Bahnhof zeichnet der Bahnhof selbst
+export function trainCars(g,net,t){const cell=new Map(),stn=new Map();
+ for(const tour of net.tours){const p=((t%tour.period)+tour.period)%tour.period;const l=tour.legs.find(l=>p>=l.start&&p<l.start+l.travel+l.wait)||tour.legs[0];
+  const q=Math.min(1,(p-l.start)/l.travel),e=q*q*(3-2*q),head=l.s0+(l.s1-l.s0)*e;
+  for(let k=0;k<TRAIN_CARS;k++){const a1=head-k*(CAR_LEN+CAR_GAP),a0=a1-CAR_LEN,A=pointAt(l,a0),B=pointAt(l,a1),M=[(A[0]+B[0])/2,(A[1]+B[1])/2];
+   const car={A,B,noseA:k===TRAIN_CARS-1,noseB:k===0,body:tour.colors[0],stripe:tour.colors[1],depth:M[0]+M[1]};
+   let sk=-1;for(const p of[A,M,B]){const c=tile(g,Math.floor(p[0]),Math.floor(p[1]));if(c?.t==='train'){sk=idx(c.rx,c.ry);car.row=Math.floor(M[1]);break;}}
+   const m=sk>=0?stn:cell,key=sk>=0?sk:idx(Math.floor(M[0]),Math.floor(M[1]));if(!m.has(key))m.set(key,[]);m.get(key).push(car);}}
+ for(const m of[cell,stn])for(const a of m.values())a.sort((p,q)=>p.depth-q.depth);return{cell,stn};}
+let NET={tours:[],used:new Set()},CARS={cell:new Map(),stn:new Map()};
+const drawCars=(ctx,list)=>{if(list)for(const c of list)railcar(ctx,c.A,c.B,c.noseA,c.noseB,c.body,c.stripe);};
+
+// ---------- Bahnhof: Gleise, Oberleitung, Bahnsteig, Gebäude (2×2 Felder) ----------
+// Die Gleise liegen genau in der Mitte der beiden Feld-Reihen, damit verlegte Schienen nahtlos anschließen.
+function station(ctx,rx,ry,t){const X=rx+1,Y=ry+1,P=(a,b,h=0)=>W([X+a,Y+b],h);
+ const poly=(ps,col)=>fillPoly(ctx,ps,col),line=(p,q,col,w)=>strokeLine(ctx,[p,q],col,w);
  const boxAB=(a0,a1,b0,b1,h,col,top)=>{poly([P(a0,b1),P(a1,b1),P(a1,b1,h),P(a0,b1,h)],shade(col,0.86));poly([P(a1,b0),P(a1,b1),P(a1,b1,h),P(a1,b0,h)],shade(col,0.72));poly([P(a0,b0,h),P(a1,b0,h),P(a1,b1,h),P(a0,b1,h)],top||shade(col,1.06));};
- const glow=(f)=>{if(!LIGHTS)return;ctx.globalAlpha=1;f();ctx.globalAlpha=0;};
- // Gleis: Schotterbett, Holzschwellen, zwei Stahlschienen
- const track=b=>{poly([P(-1,b-0.14),P(1,b-0.14),P(1,b+0.14),P(-1,b+0.14)],'#8e887d');
-  for(let a=-0.98;a<=0.99;a+=0.085)line(P(a,b-0.1,0.4),P(a,b+0.1,0.4),'#6e5238',1.6);
-  for(const o of[-0.055,0.055]){line(P(-1,b+o,1),P(1,b+o,1),'#4b4f56',1.3);line(P(-1,b+o,1.5),P(1,b+o,1.5),'#d3d6db',0.5);}};
- const masts=b=>{for(const a of[-0.85,0,0.85]){line(P(a,b-0.2,0),P(a,b-0.2,30),'#7a8088',1.4);line(P(a,b-0.2,29),P(a,b,29),'#7a8088',1);}};
- const wire=b=>line(P(-1,b,27),P(1,b,27),'rgba(60,60,60,.75)',0.6);
- // Ein Wagen (oder die Lok) zwischen a0 und a1, außerhalb des Bahnhofs abgeschnitten
- const car=(A0,A1,b,loco,body,stripe)=>{const a0=Math.max(-1,A0),a1=Math.min(1,A1);if(a1-a0<0.02)return;const w=0.13,H=13,nose=loco&&A1<=1?0.15:0,ab=a1-nose;
-  ctx.fillStyle='#1d1d1f';for(const a of[A0+0.09,A0+0.17,A1-0.17,A1-0.09])if(a>a0&&a<a1){const p=P(a,b+w,1.6);ctx.beginPath();ctx.arc(p[0],p[1],1.4,0,7);ctx.fill();}
-  poly([P(a0,b+w,2),P(ab,b+w,2),P(ab,b+w,H),P(a0,b+w,H)],body);                                    // lange Seite
-  poly([P(a0,b+w,4),P(ab,b+w,4),P(ab,b+w,5.6),P(a0,b+w,5.6)],stripe);                              // Zierstreifen
-  if(nose){poly([P(ab,b+w,2),P(a1,b+w,2),P(a1,b+w,H*0.42),P(ab,b+w,H)],body);poly([P(ab,b+w,4),P(a1,b+w,4),P(a1,b+w,5.6),P(ab,b+w,5.6)],stripe);
-   poly([P(a1,b-w,2),P(a1,b+w,2),P(a1,b+w,H*0.42),P(a1,b-w,H*0.42)],shade(body,0.78));             // Front
-   poly([P(ab,b-w,H),P(a1,b-w,H*0.42),P(a1,b+w,H*0.42),P(ab,b+w,H)],'#22313f');                     // schräge Frontscheibe
-   ctx.fillStyle='#fff6c8';for(const o of[-0.08,0.08]){const p=P(a1,b+o,3.4);ctx.beginPath();ctx.arc(p[0],p[1],0.9,0,7);ctx.fill();}
-   glow(()=>{const p=P(a1+0.25,b,2),g2=ctx.createRadialGradient(p[0],p[1],0,p[0],p[1],14);g2.addColorStop(0,'rgba(255,240,180,.55)');g2.addColorStop(1,'rgba(255,240,180,0)');ctx.fillStyle=g2;ctx.beginPath();ctx.arc(p[0],p[1],14,0,7);ctx.fill();});}
-  else poly([P(a1,b-w,2),P(a1,b+w,2),P(a1,b+w,H),P(a1,b-w,H)],shade(body,0.78));                    // Wagenende
-  poly([P(a0,b-w,H),P(ab,b-w,H),P(ab,b+w,H),P(a0,b+w,H)],'#aeb5bc');                                 // Dach
-  // Fenster und Türen
-  const win=(p0,p1,h0,h1,col)=>{if(p1<=a0||p0>=ab)return;p0=Math.max(a0,p0);p1=Math.min(ab,p1);poly([P(p0,b+w,h0),P(p1,b+w,h0),P(p1,b+w,h1),P(p0,b+w,h1)],col);
-   glow(()=>poly([P(p0,b+w,h0),P(p1,b+w,h0),P(p1,b+w,h1),P(p0,b+w,h1)],'#ffd877'));};
-  if(loco){win(A1-nose-0.14,A1-nose-0.04,7.5,11,'#3d5a73');line(P((A0+A1)/2,b,H),P((A0+A1)/2+0.05,b,27),'#555',0.8);}   // Führerstand, Stromabnehmer
-  else{win(A0+0.05,A0+0.1,2.5,11,shade(body,0.7));win(A1-0.1,A1-0.05,2.5,11,shade(body,0.7));for(let a=A0+0.14;a<A1-0.15;a+=0.085)win(a,a+0.06,7.5,11,'#3d5a73');}};
- // Zug fährt ein, hält am Bahnsteig und fährt weiter. Kopf (Lok) vorne in Fahrtrichtung +a
- const trainAt=(b,off,body,stripe)=>{const T=16000,p=(((t+off)%T)+T)%T/T,stop=0.95;
+ const masts=m=>{if(LIGHTS)return;for(const a of[-0.85,0,0.85]){line(P(a,m,0),P(a,m,30),'#7a8088',1.4);line(P(a,m,29),P(a,m+(m<0?-0.22:-0.25),29),'#7a8088',1);}};
+ const wire=b=>{if(!LIGHTS)line(P(-1,b,27),P(1,b,27),'rgba(60,60,60,.75)',0.6);};
+ // Eigener Zug, solange keine Strecke über dieses Gleis führt: fährt ein, hält, fährt weiter
+ const local=(b,off,body,stripe)=>{const T=16000,p=(((t+off)%T)+T)%T/T,stop=0.95;
   const head=p<0.4?-1+(stop+1)*(1-(1-p/0.4)**2):p<0.65?stop:stop+2.1*((p-0.65)/0.35)**2;
-  const L=[0.6,0.56,0.56];let a1=head;for(let i=0;i<L.length;i++){const a0=a1-L[i];L[i]={a0,a1};a1=a0-0.04;}
-  for(let i=L.length-1;i>=0;i--)car(L[i].a0,L[i].a1,b,i===0,body,stripe);};
+  for(let k=TRAIN_CARS-1;k>=0;k--){const A1=head-k*(CAR_LEN+CAR_GAP),A0=A1-CAR_LEN,a0=Math.max(-1,A0),a1=Math.min(1,A1);if(a1-a0<0.03)continue;
+   railcar(ctx,[X+a0,Y+b],[X+a1,Y+b],k===TRAIN_CARS-1&&A0>=-1,k===0&&A1<=1,body,stripe);}};
+ const rowCars=r=>{const list=CARS.stn.get(idx(rx,ry));return list&&list.filter(c=>c.row===r);};
+ const trackRow=(b,r,off,col)=>{if(!LIGHTS)drawTrack(ctx,[[rx,Y+b],[rx+2,Y+b]]);
+  if(NET.used.has(idx(rx,r)))drawCars(ctx,rowCars(r));else local(b,off,col[0],col[1]);};
  // Bahnhofsgebäude hinten
- boxAB(-0.8,0.55,-0.98,-0.55,26,'#e9dcc2','#b5523a');
- for(let k=0;k<5;k++){const a=-0.7+k*0.25;poly([P(a,-0.55,6),P(a+0.12,-0.55,6),P(a+0.12,-0.55,18),P(a,-0.55,18)],'#5c7ea0');glow(()=>poly([P(a,-0.55,6),P(a+0.12,-0.55,6),P(a+0.12,-0.55,18),P(a,-0.55,18)],'#ffd877'));}
- {const p=P(-0.12,-0.55,22);ctx.fillStyle='#fff';ctx.beginPath();ctx.ellipse(p[0],p[1]+1,3.4,3,0,0,7);ctx.fill();ctx.strokeStyle='#333';ctx.lineWidth=0.7;ctx.stroke();line([p[0],p[1]+1],[p[0],p[1]-1.2],'#333',0.6);line([p[0],p[1]+1],[p[0]+1.5,p[1]+1.6],'#333',0.6);}
- // hinteres Gleis mit Zug, dann Bahnsteig mit Dach, dann vorderes Gleis mit Zug
- masts(-0.18);track(-0.18);trainAt(-0.18,0,'#f4f6f8','#d0312d');wire(-0.18);
- boxAB(-0.95,0.95,0,0.3,3,'#d6d0c2','#e2ddd2');line(P(-0.95,0.03,3.1),P(0.95,0.03,3.1),'#f1c40f',1);line(P(-0.95,0.27,3.1),P(0.95,0.27,3.1),'#f1c40f',1);
- for(const a of[-0.6,0,0.6])line(P(a,0.15,3),P(a,0.15,21),'#5a6470',1.4);
- poly([P(-0.8,0.03,21),P(0.8,0.03,21),P(0.8,0.3,21),P(-0.8,0.3,21)],'#6a7886');poly([P(-0.8,0.3,19),P(0.8,0.3,19),P(0.8,0.3,21),P(-0.8,0.3,21)],'#4d5965');
- masts(0.58);track(0.58);trainAt(0.58,8000,'#d0312d','#f4f6f8');wire(0.58);
- label(ctx,P(-0.12,-0.76,0)[0],P(-0.12,-0.76,40)[1],'🚉',14);}
+ boxAB(-0.8,0.55,-0.98,-0.7,26,'#e9dcc2','#b5523a');
+ for(let k=0;k<5;k++){const a=-0.7+k*0.25,q=[P(a,-0.7,6),P(a+0.12,-0.7,6),P(a+0.12,-0.7,18),P(a,-0.7,18)];poly(q,'#5c7ea0');glowOn(()=>poly(q,'#ffd877'));}
+ {const p=P(-0.12,-0.7,22);ctx.fillStyle='#fff';ctx.beginPath();ctx.ellipse(p[0],p[1]+1,3.4,3,0,0,7);ctx.fill();ctx.strokeStyle='#333';ctx.lineWidth=0.7;ctx.stroke();line([p[0],p[1]+1],[p[0],p[1]-1.2],'#333',0.6);line([p[0],p[1]+1],[p[0]+1.5,p[1]+1.6],'#333',0.6);}
+ // hinteres Gleis, Bahnsteig mit Dach, vorderes Gleis
+ masts(-0.3);trackRow(-0.5,ry,0,TRAIN_COLORS[0]);wire(-0.5);
+ boxAB(-0.95,0.95,-0.3,0.3,3,'#d6d0c2','#e2ddd2');line(P(-0.95,-0.27,3.1),P(0.95,-0.27,3.1),'#f1c40f',1);line(P(-0.95,0.27,3.1),P(0.95,0.27,3.1),'#f1c40f',1);
+ for(const a of[-0.6,0,0.6])line(P(a,0,3),P(a,0,21),'#5a6470',1.4);
+ poly([P(-0.8,-0.25,21),P(0.8,-0.25,21),P(0.8,0.25,21),P(-0.8,0.25,21)],'#6a7886');poly([P(-0.8,0.25,19),P(0.8,0.25,19),P(0.8,0.25,21),P(-0.8,0.25,21)],'#4d5965');
+ masts(0.78);trackRow(0.5,ry+1,8000,TRAIN_COLORS[1]);wire(0.5);
+ label(ctx,P(-0.12,-0.84,0)[0],P(-0.12,-0.84,40)[1],'🚉',14);}
 function special(ctx,id,cx,cy,n,t,big){const hw=n*TW/2*0.82,hh=n*TH/2*0.82;if(big){ctx.save();ctx.translate(cx,cy);ctx.scale(1.15,1.15);ctx.translate(-cx,-cy);}try{
  switch(id){
   case'school':box(ctx,cx,cy,20,10,18,'#f3d36b');windows(ctx,cx,cy,20,10,3,15,2,3,'#5c7ea0');pyramidRoof(ctx,cx,cy,20,10,18,10,'#b5523a');ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(cx+10,cy-10,3,0,7);ctx.fill();flag(ctx,cx-14,cy-18,'#3f7ad8');break;
@@ -237,7 +320,6 @@ function special(ctx,id,cx,cy,n,t,big){const hw=n*TW/2*0.82,hh=n*TH/2*0.82;if(bi
   case'police':box(ctx,cx,cy,19,9.5,20,'#3f6fb8','#5a86cc');windows(ctx,cx,cy,19,9.5,3,17,2,3,'#cfe0f3');ctx.fillStyle=Math.floor(t/400)%2?'#ff4a3a':'#3a7aff';ctx.fillRect(cx-3,cy-25,6,3);break;
   case'bus':ctx.fillStyle='#8a8f96';for(const[a,b]of[[-16,-2],[14,-2],[-2,6]])ctx.fillRect(cx+a,cy+b-16,2,16);box(ctx,cx,cy-16,20,10,2,'#5d6b7a');ctx.fillStyle='#f2c230';ctx.fillRect(cx-12,cy-8,22,8);ctx.fillStyle='#8ec3e6';ctx.fillRect(cx-10,cy-7,18,3);break;
   case'hospital':box(ctx,cx,cy,hw*0.8,hh*0.8,44,'#f4f6f8','#e3e8ec');windows(ctx,cx,cy,hw*0.8,hh*0.8,3,42,5,5,'#8cc0dc');ctx.fillStyle='#e0322b';ctx.fillRect(cx-3,cy-60,6,16);ctx.fillRect(cx-8,cy-55,16,6);break;
-  case'train':station(ctx,cx,cy,t);break;
   case'uni':box(ctx,cx,cy,hw*0.8,hh*0.8,26,'#efe6d2');columns(ctx,cx,cy,hw*0.8,hh*0.8,24,6);pediment(ctx,cx,cy,hw*0.8,hh*0.8,26,'#e2d6bb');ctx.fillStyle='#8fb7c9';ctx.beginPath();ctx.arc(cx,cy-40,10,Math.PI,0);ctx.fill();label(ctx,cx,cy-56,'🎓',13);break;
   case'sport':ctx.strokeStyle='#fff';ctx.lineWidth=1.5;diamond(ctx,cx,cy,hw*0.8,hh*0.8);ctx.stroke();ctx.beginPath();ctx.moveTo(cx-hw*0.4,cy-hh*0.4);ctx.lineTo(cx+hw*0.4,cy+hh*0.4);ctx.stroke();ctx.beginPath();ctx.ellipse(cx,cy,8,4,0,0,7);ctx.stroke();box(ctx,cx+hw*0.55,cy-hh*0.55,14,7,8,'#9aa4ad');label(ctx,cx-6,cy+2,'⚽',10);break;
   case'pool':ctx.fillStyle='#e9e4d8';diamond(ctx,cx,cy,hw,hh);ctx.fill();ctx.fillStyle='#4fb6e8';diamond(ctx,cx,cy+2,hw*0.6,hh*0.6);ctx.fill();ctx.strokeStyle='rgba(255,255,255,.7)';ctx.lineWidth=1;for(let k=-1;k<=1;k++){ctx.beginPath();ctx.moveTo(cx-hw*0.3+k*8,cy-hh*0.3+k*4+2);ctx.lineTo(cx+hw*0.3+k*8,cy+hh*0.3+k*4+2);ctx.stroke();}box(ctx,cx-hw*0.6,cy-hh*0.3,12,6,12,'#f2f2f2');label(ctx,cx+14,cy-14,'⛱️',12);break;
@@ -319,7 +401,7 @@ function special(ctx,id,cx,cy,n,t,big){const hw=n*TW/2*0.82,hh=n*TH/2*0.82;if(bi
   case'pump':cyl(ctx,cx-hw*0.35,cy,14,18,'#7fa9c9','#a9cbe8');cyl(ctx,cx+hw*0.25,cy-hh*0.3,12,16,'#7fa9c9','#a9cbe8');box(ctx,cx+hw*0.2,cy+hh*0.4,14,7,14,'#e3e8ec');label(ctx,cx-hw*0.35,cy-26,'💧',12);break;
  }}finally{if(big){ctx.restore();if(id==='space')label(ctx,cx,cy-150,'🛸',18);if(id==='stadium')label(ctx,cx,cy-40,'🏅',16);}}}
 function building(ctx,c,x,y,cx,cy,t){
- const T=tool(c.t);if(T&&(T.size>1)){if(c.rx===undefined)return;const n=T.size;if(x!==c.rx+n-1||y!==c.ry+n-1)return;const p=cellTop(c.rx+n/2,c.ry+n/2);return special(ctx,c.t,p.x,p.y,n,t);}
+ const T=tool(c.t);if(T&&(T.size>1)){if(c.rx===undefined)return;const n=T.size;if(x!==c.rx+n-1||y!==c.ry+n-1)return;if(c.t==='train')return station(ctx,c.rx,c.ry,t);const p=cellTop(c.rx+n/2,c.ry+n/2);return special(ctx,c.t,p.x,p.y,n,t);}
  if(T&&['school','fire','police','bus','tvtower','quarry','village','metro','cablecar','oil','depot'].includes(c.t))return special(ctx,c.t,cx,cy,1,t);
  if(c.t==='shop')return shop(ctx,c,x,y,cx,cy,t);if(c.t==='factory')return factory(ctx,c,x,y,cx,cy,t);
  if(c.t==='tree'){const v=hash(x,y);tree(ctx,cx-8+v*6,cy+2,1);tree(ctx,cx+8,cy-2+v*4,0.85);if(v>0.5)tree(ctx,cx,cy+6,0.75);}
@@ -341,17 +423,21 @@ const HEIGHT={house:[0,30,38,40,60,104,170,270],shop:[0,22,30,46,70,120,200],fac
 export function draw(ctx,g,cam,{w,h,dpr,sel,preview,t,showNeeds,money,dirt,traffic,land,bg=true,area,env}){const V=info(g);TRUCKS=V.cap>0;SEASON=env?.season||'summer';NIGHT=env?.night||0;LIGHTS=false;ZOOM=cam.z;const vis=[];
  ctx.setTransform(dpr,0,0,dpr,0,0);if(bg){ctx.fillStyle='#5f9d4b';ctx.fillRect(0,0,w,h);}
  ctx.setTransform(dpr*cam.z,0,0,dpr*cam.z,dpr*cam.x,dpr*cam.y);
- const pad=200;
+ const pad=200;ctx0=ctx;NET=railNet(g);CARS=trainCars(g,NET,t);const cells=[];
  for(let d=0;d<MAP_W+MAP_H-1;d++)for(let x=Math.max(0,d-MAP_H+1);x<=Math.min(d,MAP_W-1);x++){const y=d-x,p=cellTop(x,y),cx=p.x,cy=p.y+TH/2;
-  const sx=cx*cam.z+cam.x,sy=cy*cam.z+cam.y;if(sx<-pad||sx>w+pad||sy<-pad||sy>h+pad*2)continue;if(area&&(x<area[0]||y<area[1]||x>area[2]||y>area[3]))continue;
-  const c=g.tiles[y*MAP_W+x],mine=owns(g,x,y);ground(ctx,c,x,y,cx,cy,t);
-  if(c.t==='road'){const j=V.jam[y*MAP_W+x];if(traffic){ctx.fillStyle=j>1?'rgba(220,40,30,.55)':j>0.7?'rgba(240,170,30,.5)':'rgba(60,170,60,.35)';diamond(ctx,cx,cy,TW/2,TH/2);ctx.fill();}
-   roadMarks(ctx,g,x,y,cx,cy,c,t,cam.z>0.55?Math.min(1.5,j):0);}
+  const sx=cx*cam.z+cam.x,sy=cy*cam.z+cam.y;if(sx<-pad||sx>w+pad||sy<-pad||sy>h+pad*2)continue;if(area&&(x<area[0]||y<area[1]||x>area[2]||y>area[3]))continue;cells.push([x,y,cx,cy]);}
+ // 1. Durchgang: flacher Boden (Gras, Straßen, Gleise, Markierungen) – so verdeckt nichts Flaches einen Zug oder ein Haus
+ for(const[x,y,cx,cy]of cells){const c=g.tiles[y*MAP_W+x],mine=owns(g,x,y);ground(ctx,c,x,y,cx,cy,t);
+  if(c.t==='road'&&traffic){const j=V.jam[y*MAP_W+x];ctx.fillStyle=j>1?'rgba(220,40,30,.55)':j>0.7?'rgba(240,170,30,.5)':'rgba(60,170,60,.35)';diamond(ctx,cx,cy,TW/2,TH/2);ctx.fill();}
+  if(isRail(c))railTile(ctx,g,x,y,c);
   if(!mine){ctx.fillStyle=land&&canBuy(g,Math.floor(x/SECTOR),Math.floor(y/SECTOR))?'rgba(255,230,120,.28)':'rgba(20,30,20,.32)';diamond(ctx,cx,cy,TW/2+0.6,TH/2+0.6);ctx.fill();}
   if(dirt&&covered(g,x,y,'dirt')){ctx.fillStyle='rgba(120,80,40,.38)';diamond(ctx,cx,cy,TW/2,TH/2);ctx.fill();}
   if(preview&&x>=preview.x&&y>=preview.y&&x<preview.x+(preview.n||1)&&y<preview.y+(preview.n||1)){ctx.fillStyle=preview.ok?'rgba(255,255,255,.35)':'rgba(220,60,40,.35)';diamond(ctx,cx,cy,TW/2,TH/2);ctx.fill();}
-  if(sel&&sel.x===x&&sel.y===y){ctx.strokeStyle='#ffd23f';ctx.lineWidth=2.5;diamond(ctx,cx,cy,TW/2-1,TH/2-1);ctx.stroke();}
-  building(ctx,c,x,y,cx,cy,t);if(NIGHT>0.05)vis.push([c,x,y,cx,cy]);
+  if(sel&&sel.x===x&&sel.y===y){ctx.strokeStyle='#ffd23f';ctx.lineWidth=2.5;diamond(ctx,cx,cy,TW/2-1,TH/2-1);ctx.stroke();}}
+ // 2. Durchgang: von hinten nach vorne Ampeln, Autos, Züge und Gebäude
+ for(const[x,y,cx,cy]of cells){const c=g.tiles[y*MAP_W+x];
+  if(c.t==='road')roadMarks(ctx,g,x,y,cx,cy,c,t,cam.z>0.55?Math.min(1.5,V.jam[y*MAP_W+x]):0);
+  drawCars(ctx,CARS.cell.get(y*MAP_W+x));building(ctx,c,x,y,cx,cy,t);if(NIGHT>0.05)vis.push([c,x,y,cx,cy]);
   if(showNeeds&&HEIGHT[c.t]){const top=cy-HEIGHT[c.t][c.lvl]-6;
    if(c.lvl<maxLevel(c)){const miss=missing(g,x,y,c.lvl+1);if(miss.length){if(miss[0]!=='city')bubble(ctx,cx,top,NEEDS[miss[0]].icon,'rgba(255,255,255,.92)');}else if(money>=upgradeCost(c))bubble(ctx,cx,top,'⬆️','rgba(190,240,160,.95)');}}
  }
@@ -360,7 +446,7 @@ export function draw(ctx,g,cam,{w,h,dpr,sel,preview,t,showNeeds,money,dirt,traff
   if(env?.weather==='cloud'||env?.weather==='rain'){ctx.fillStyle=`rgba(90,100,115,${env.weather==='rain'?0.22:0.12})`;ctx.fillRect(0,0,w,h);}
   if(env?.dusk&&NIGHT<0.9){ctx.fillStyle=`rgba(255,130,60,${0.14*(1-Math.abs(NIGHT-0.5)*2)})`;ctx.fillRect(0,0,w,h);}
   if(NIGHT>0.05){ctx.fillStyle=`rgba(12,20,60,${0.58*NIGHT})`;ctx.fillRect(0,0,w,h);}ctx.restore();}
- if(NIGHT>0.3){LIGHTS=true;ctx.globalAlpha=0;for(const[c,x,y,cx,cy]of vis){if(c.t==='road')roadMarks(ctx,g,x,y,cx,cy,c,t,cam.z>0.55?Math.min(1.5,V.jam[y*MAP_W+x]):0);else building(ctx,c,x,y,cx,cy,t);}
+ if(NIGHT>0.3){LIGHTS=true;ctx.globalAlpha=0;for(const[c,x,y,cx,cy]of vis){if(c.t==='road')roadMarks(ctx,g,x,y,cx,cy,c,t,cam.z>0.55?Math.min(1.5,V.jam[y*MAP_W+x]):0);drawCars(ctx,CARS.cell.get(y*MAP_W+x));if(c.t!=='road')building(ctx,c,x,y,cx,cy,t);}
   ctx.globalAlpha=1;LIGHTS=false;}
  // Wetter: Regen und Schnee (in Bildschirm-Koordinaten)
  if(env?.weather==='rain'||env?.weather==='snow'){ctx.save();ctx.setTransform(dpr,0,0,dpr,0,0);const snow=env.weather==='snow',n=snow?110:160;

@@ -97,7 +97,7 @@ document.addEventListener('visibilitychange',()=>{if(game)save();});
 // ---------- Bauen ----------
 function anchor(x,y){const n=tool(cur)?.size||1,o=Math.floor((n-1)/2);return{x:x-o,y:y-o,n};}
 // ---------- Mini-Karte: ganze Welt auf einen Blick, Tippen springt dorthin ----------
-const MINI_COL={grass:'#86c56a',tree:'#3f8a3a',water:'#4fa3d8',rock:'#9c9a94',road:'#55585e',zone:'#bfe3a8',zonec:'#bcd6f0',zonei:'#ecdf9c',shop:'#3d7fd1',factory:'#d4a017',park:'#5fb04a'};
+const MINI_COL={grass:'#86c56a',tree:'#3f8a3a',water:'#4fa3d8',rock:'#9c9a94',road:'#55585e',rail:'#8e887d',zone:'#bfe3a8',zonec:'#bcd6f0',zonei:'#ecdf9c',shop:'#3d7fd1',factory:'#d4a017',park:'#5fb04a'};
 function miniColor(c){if(c.t==='house')return['','#f2c4a8','#e9a27f','#d9805e','#c0604a','#a04a6a','#7a3a8a','#4a2a9a'][c.lvl];return MINI_COL[c.t]||(tool(c.t)?.onRock?'#6d6a62':'#d64545');}
 function miniPanel(){const p=$('#panel');delete p.dataset.modal;sel=null;const S=2,Wm=MAP_W*S,Hm=MAP_H*S/2+2;
  p.innerHTML=`<button class="close" data-close aria-label="Schließen">✕</button><h3>🧭 Übersichtskarte</h3><p class="muted small">Tippe auf eine Stelle, um dorthin zu springen. Der gelbe Punkt zeigt, wo du gerade bist.</p><canvas id="mini" width="${Wm*2}" height="${Hm*2}"></canvas>`;p.classList.remove('hidden');
@@ -113,7 +113,7 @@ let undoStack=[],stroke=null;
 function remember(prev){undoStack.push(prev);if(undoStack.length>15)undoStack.shift();fab();}
 function undo(){if(!undoStack.length)return toast('Es gibt nichts mehr rückgängig zu machen.');game=update(undoStack.pop(),Date.now());save();sel=null;panel();hud();toolbar();fab();sfx('click');toast('↩️ Rückgängig gemacht');}
 function apply(x,y,quiet){if(!game)return false;const prev=game;if(cur==='land'){if(!quiet)landPanel(x,y);return false;}const a=anchor(x,y);if(a.n>1&&quiet)return false;const r=act(game,{type:'build',tool:cur,x:a.x,y:a.y},Date.now());
- if(r.error){if(!quiet||/Geld/.test(r.error)){toast(r.error,'err');sfx('error');}return false;}if(stroke){if(!stroke.pushed){remember(stroke.prev);stroke.pushed=true;}}else remember(prev);game=r.game;save();hud();sfx(cur==='bulldoze'?'bulldoze':cur==='road'||cur==='lanes'?'road':'build');if(r.message){toast(r.message,'gold');toolbar();}tutCheck();return true;}
+ if(r.error){if(!quiet||/Geld/.test(r.error)){toast(r.error,'err');sfx('error');}return false;}if(stroke){if(!stroke.pushed){remember(stroke.prev);stroke.pushed=true;}}else remember(prev);game=r.game;save();hud();sfx(cur==='bulldoze'?'bulldoze':cur==='road'||cur==='lanes'||cur==='rail'?'road':'build');if(r.message){toast(r.message,'gold');toolbar();}tutCheck();return true;}
 function line(a,b,fn){let{x,y}=a;fn(x,y);while(x!==b.x||y!==b.y){if(x!==b.x)x+=Math.sign(b.x-x);else y+=Math.sign(b.y-y);fn(x,y);}}
 
 // ---------- Infofenster ----------
@@ -140,10 +140,11 @@ function panel(){const p=$('#panel');if(!sel){p.classList.add('hidden');return;}
  else if(c.t==='zonec'||c.t==='zonei'){const shopz=c.t==='zonec',d=demand(game)[shopz?'shop':'factory'],road=hasRoad(game,sel.x,sel.y),pw=shopz||has(game,sel.x,sel.y,'power');
   html=`<h3>${shopz?'🛒 Gewerbegebiet':'🏭 Industriegebiet'}</h3><p>${!road?'❌ Es fehlt eine Straße direkt am Grundstück.':!pw?'❌ Fabriken brauchen Strom – bau ein Kraftwerk in der Nähe.':d<=0?`⏳ Gerade werden keine weiteren ${shopz?'Läden':'Fabriken'} gebraucht. Mehr Einwohner bringen mehr Nachfrage.`:(c.ready?'🚧 Hier wird gebaut!':'Bald entsteht hier etwas.')}</p>`;}
  else if(c.t==='zone')html=`<h3>🏡 Wohngebiet</h3><p>${!hasRoad(game,sel.x,sel.y)?'❌ Es fehlt eine Straße direkt am Grundstück. Ohne Straße zieht niemand ein.':demand(game).house<=0?'⏳ Gerade zieht niemand zu – es fehlen Arbeitsplätze. Bau Läden und Fabriken!':c.ready?'🚧 Hier wird gebaut – gleich ziehen Leute ein!':'Bald ziehen Leute ein.'}</p>`;
+ else if(c.t==='rail')html='<h3>🚆 Schiene</h3><p>Verbinde damit Bahnhöfe. Ein Zug fährt dann von Bahnhof zu Bahnhof und wieder zurück. Gibt es nur einen Bahnhof, fährt er bis zum Ende der Strecke.</p><p class="muted small">Die Gleise kommen an den beiden schmalen Enden des Bahnhofs an. Über eine einspurige Straße entsteht ein Bahnübergang.</p>';
  else if(tool(c.t)?.cost&&!['road','bulldoze'].includes(c.t)){const t=tool(c.t);html=`<h3>${t.icon} ${t.name}</h3>${t.provides?`<p>Versorgt alles im Umkreis von ${t.radius} Feldern mit ${NEEDS[t.provides].icon} ${{power:'Strom',water:'Wasser',park:'Erholung',school:'Bildung',fire:'Brandschutz',police:'Sicherheit',hospital:'Gesundheit',bus:'Busverbindungen'}[t.provides]}.</p>`:''}
   <ul class="needs">${t.jobs?`<li>💼 ${fmt(t.jobs)} Arbeitsplätze</li>`:''}${t.attr?`<li>⭐ Attraktivität ${t.attr>0?'+':''}${t.attr}</li>`:''}${t.tour?`<li>🧳 Touristen bringen ${fmt(t.tour)} Taler pro Minute</li>`:''}${t.prod?`<li>⛏️ fördert ${fmt(t.prod)} ${GOODS[t.good]?.name||'Rohstoffe'} pro Minute</li>`:''}${t.cap?`<li>🚚 transportiert ${fmt(t.cap)} Waren pro Minute zu den Nachbarstädten</li>`:''}${t.dirt?`<li>🌫️ macht Dreck und Lärm im Umkreis von ${t.dirt} Feldern</li>`:''}<li>🔧 Kosten im Betrieb: ${t.upkeep||0} Taler pro Minute</li></ul>`;}
  else if(c.t==='road'){const j=jam(game,sel.x,sel.y),L=c.lanes||1,nx=ROAD_LANES[L+1];html=`<h3>🛣️ ${ROAD_LANES[L].name}</h3><p>Verkehr: <b>${j>1?'🔴 Stau':j>0.7?'🟠 viel los':'🟢 frei'}</b> (${Math.round(j*100)} % ausgelastet)</p>
-  ${nx?`<p class="muted">Mit „Straße ausbauen“ wird sie zur ${nx.name}${cityLevel(game)<nx.lvl?` (ab Level ${nx.lvl})`:` (${fmt(nx.cost)} Taler pro Feld)`}.</p>`:''}<p class="muted small">Bus, U-Bahn und Bahnhof entlasten die Straßen in der Nähe.</p>`;}
+  ${nx?`<p class="muted">Mit „Straße ausbauen“ wird sie zur ${nx.name}${cityLevel(game)<nx.lvl?` (ab Level ${nx.lvl})`:` (${fmt(nx.cost)} Taler pro Feld)`}.</p>`:''}${c.rail?'<p>🚆 Hier kreuzt eine Bahnstrecke (Bahnübergang).</p>':''}<p class="muted small">Bus, U-Bahn und Bahnhof entlasten die Straßen in der Nähe.</p>`;}
  else if(c.t==='rock')html='<h3>⛰️ Fels</h3><p>Hier geht nur Bergbau (Steinbruch, Kohle-, Erz- und Goldmine) oder eine Straße.</p>';
  else if(c.t==='tree')html=`<h3>🌲 Bäume</h3><p>Hier kannst du bauen – die Bäume werden dann gefällt (+${TREE_CLEAR} Taler).</p>`;
  else if(c.t==='water')html='<h3>🌊 Wasser</h3><p>Hier kann man nicht bauen.</p>';
@@ -171,7 +172,7 @@ function bindPointer(){const pts=new Map();let start=null,moved=false,painting=f
   start={...pos(e),cx:cam.x,cy:cam.y};moved=false;last=null;
   if(cur!=='hand'){painting=true;stroke={prev:game,pushed:false};const c=screenToCell(cam,e.clientX,e.clientY);last=c;apply(c.x,c.y,false);}});
  canvas.addEventListener('pointermove',e=>{
-  if(!pts.has(e.pointerId)){if(cur!=='hand'&&e.pointerType==='mouse'){const c=screenToCell(cam,e.clientX,e.clientY),a=anchor(c.x,c.y);const t=tile(game,c.x,c.y);preview=t?{x:a.x,y:a.y,n:a.n,ok:cur==='bulldoze'?t.t!=='water'&&t.t!=='grass':cur==='road'||cur.startsWith('zone')?(t.t==='grass'||t.t==='tree'):canPlace(game,cur,a.x,a.y).ok}:null;}return;}
+  if(!pts.has(e.pointerId)){if(cur!=='hand'&&e.pointerType==='mouse'){const c=screenToCell(cam,e.clientX,e.clientY),a=anchor(c.x,c.y);const t=tile(game,c.x,c.y);preview=t?{x:a.x,y:a.y,n:a.n,ok:cur==='bulldoze'?t.t!=='water'&&t.t!=='grass':cur==='rail'?(t.t==='grass'||t.t==='tree'||t.t==='rock'||(t.t==='road'&&(t.lanes||1)===1)):cur==='road'||cur.startsWith('zone')?(t.t==='grass'||t.t==='tree'):canPlace(game,cur,a.x,a.y).ok}:null;}return;}
   pts.set(e.pointerId,pos(e));
   if(pts.size===2&&pinch){const[a,b]=[...pts.values()],d=Math.hypot(a.x-b.x,a.y-b.y),m={x:(a.x+b.x)/2,y:(a.y+b.y)/2};
    const z=Math.max(0.18,Math.min(2.6,pinch.z*d/pinch.d));cam.z=z;cam.x=m.x-(pinch.m.x-pinch.cx)*z/pinch.z;cam.y=m.y-(pinch.m.y-pinch.cy)*z/pinch.z;return;}

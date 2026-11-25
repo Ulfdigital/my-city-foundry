@@ -171,3 +171,15 @@ test('Erfolge: werden einmal vergeben, bringen Belohnung; alte Städte bekommen 
  const old=newGame(T0);fill(old,1200,{t:'house',lvl:3});delete old.achv;const r=restore(JSON.stringify(old));assert.ok(r.achv.pop1000);assert.equal(r.newAchv.length,0);});
 test('Stadtwappen wird gespeichert und bereinigt',()=>{let g=newGame(T0);g=ok(g,{type:'setCrest',crest:{shape:1,c1:'#ff0000',c2:'#00ff00',sym:'🦁',split:2}});
  assert.deepEqual(g.crest,{shape:1,c1:'#ff0000',c2:'#00ff00',sym:'🦁',split:2});});
+test('Schienen: verlegen, Bahnübergang und Zug zwischen zwei Bahnhöfen',async()=>{const {railNet,trainCars}=await import('../js/render.mjs');
+ let g=newGame(T0);g.level=20;g.money=1e6;const s=g.start,X=s.x-14,Y=s.y+5;
+ for(let y=Y-1;y<Y+4;y++)for(let x=X-1;x<X+12;x++)g.tiles[y*MAP_W+x]={t:'grass'};g.rev++;
+ assert.match(bad({...g,level:10},{type:'build',tool:'rail',x:X+3,y:Y}),/Level 16/);
+ g=ok(g,{type:'build',tool:'train',x:X,y:Y});const m=g.money;
+ for(let x=X+2;x<X+8;x++)g=ok(g,{type:'build',tool:'rail',x,y:Y});assert.equal(m-g.money,6*tool('rail').cost);assert.equal(tile(g,X+4,Y).t,'rail');
+ g=ok(g,{type:'build',tool:'road',x:X+5,y:Y});assert.deepEqual({t:tile(g,X+5,Y).t,rail:tile(g,X+5,Y).rail},{t:'road',rail:true});
+ assert.match(bad(g,{type:'build',tool:'lanes',x:X+5,y:Y}),/einspurig/);
+ g=ok(g,{type:'build',tool:'train',x:X+8,y:Y});
+ const net=railNet(g);assert.equal(net.tours.length,1);assert.equal(net.tours[0].legs.length,2);
+ const cars=trainCars(g,net,net.tours[0].legs[0].travel*0.5);assert.equal([...cars.cell.values(),...cars.stn.values()].flat().length,3);
+ g=ok(g,{type:'build',tool:'bulldoze',x:X+4,y:Y});assert.equal(railNet(g).tours.length,2,'Strecke unterbrochen: zwei Züge, jeder fährt bis zu seinem Prellbock');});

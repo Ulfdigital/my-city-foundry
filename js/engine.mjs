@@ -62,7 +62,7 @@ export function info(g){const hit=cache.get(g);if(hit&&hit.rev===(g.rev||0))retu
   if(c.t==='house'){const p=LEVELS[c.lvl].people;v.pop+=p;emit(x,y,p*TRAFFIC_PER_PERSON);continue;}
   if(BIZ[c.t]){const j=BIZ[c.t].jobs[c.lvl];v.jobs+=j;if(c.t==='shop'){v.jobsShop+=j;stamp('shop',x,y,1,BIZ.shop.radius);}else{v.jobsFactory+=j;v.goods.goods=(v.goods.goods||0)+j*FACTORY_GOODS;v.attr-=c.lvl;stamp('dirt',x,y,1,FACTORY_DIRT[Math.min(c.lvl,FACTORY_DIRT.length-1)]);}
    v.biztax+=BIZ[c.t].tax[c.lvl];emit(x,y,j*TRAFFIC_PER_JOB);continue;}
-  const T=tool(c.t);if(!T||c.part||c.t==='road')continue;            // Teile großer Gebäude nur einmal (am Ursprung) zählen
+  const T=tool(c.t);if(!T||c.part||c.t==='road'||c.t==='rail')continue;            // Teile großer Gebäude nur einmal (am Ursprung) zählen
   v.count[c.t]=(v.count[c.t]||0)+1;v.upkeep+=T.upkeep||0;v.jobs+=T.jobs||0;v.attr+=T.attr||0;v.tour+=T.tour||0;v.cap+=T.cap||0;
   if(T.prod){const p=T.prod*(T.onRock&&gv[sectorOf(x,y)]==='goldvein'?GOLDVEIN_BONUS:1);v.prod+=p;v.goods[T.good]=(v.goods[T.good]||0)+p;}
   if(T.provides)stamp(T.provides,x,y,T.size||1,T.radius);if(T.dirt)stamp('dirt',x,y,T.size||1,T.dirt);if(T.transit)stamp('bus',x,y,1,T.radius);
@@ -228,8 +228,16 @@ const A={
    if(c.rx!==undefined){const s=tool(c.t).size||1;for(let j=c.ry;j<c.ry+s;j++)for(let i=c.rx;i<c.rx+s;i++)g.tiles[idx(i,j)]=back(c);}else g.tiles[idx(x,y)]=back(c);
    touch(g);stat(g,'bulldoze');return null;}
   if(id==='lanes'){if(c.t!=='road')throw new Error('Tippe auf eine Straße, um sie auszubauen.');const n=lanes(c)+1;if(n>=ROAD_LANES.length)throw new Error('Mehr Spuren gehen nicht – das ist schon eine Stadtautobahn.');
+   if(c.rail)throw new Error('Am Bahnübergang bleibt die Straße einspurig.');
    const L=ROAD_LANES[n];if(cityLevel(g)<L.lvl)throw new Error(`${L.name} gibt es ab Stadt-Level ${L.lvl}.`);pay(g,L.cost,L.name);own(g,x,y).lanes=n;touch(g);stat(g,'lanes');return null;}
   if(c.t===id&&!T.size)return null;                       // schon da – beim Ziehen einfach überspringen
+  // Schiene: wie eine Straße verlegen; über einer einspurigen Straße wird ein Bahnübergang daraus
+  if(id==='rail'){if(!owns(g,x,y))throw new Error('Dieses Gebiet gehört dir noch nicht. Kaufe es mit „Land“.');if(c.t==='water')throw new Error('Auf Wasser kann man nicht bauen.');
+   if(c.t==='road'){if(c.rail)return null;if(lanes(c)>1)throw new Error('Ein Bahnübergang geht nur über eine einspurige Straße.');pay(g,T.cost,'Ein Bahnübergang');own(g,x,y).rail=true;touch(g);stat(g,'rail');return null;}
+   if(!['grass','tree','rock'].includes(c.t))throw new Error('Hier steht schon etwas. Erst abreißen.');pay(g,T.cost*(c.t==='rock'?ROCK_ROAD:1)+(c.t==='tree'?TREE_CLEAR:0),T.name);
+   g.tiles[idx(x,y)]=c.t==='rock'?{t:'rail',rock:true}:{t:'rail'};touch(g);stat(g,'rail');return null;}
+  if(id==='road'&&c.t==='rail'){if(!owns(g,x,y))throw new Error('Dieses Gebiet gehört dir noch nicht.');pay(g,T.cost,'Ein Bahnübergang');
+   g.tiles[idx(x,y)]=c.rock?{t:'road',lanes:1,rail:true,rock:true}:{t:'road',lanes:1,rail:true};touch(g);stat(g,'road');update(g,now);return null;}
   if(id==='road'){if(!owns(g,x,y))throw new Error('Dieses Gebiet gehört dir noch nicht. Kaufe es mit „Land“.');if(c.t==='water')throw new Error('Auf Wasser kann man nicht bauen.');
    if(!['grass','tree','rock'].includes(c.t))throw new Error('Hier steht schon etwas. Erst abreißen.');pay(g,T.cost*(c.t==='rock'?ROCK_ROAD:1)+(c.t==='tree'?TREE_CLEAR:0),T.name);
    g.tiles[idx(x,y)]=c.t==='rock'?{t:'road',lanes:1,rock:true}:{t:'road',lanes:1};touch(g);stat(g,'road');update(g,now);return null;}
