@@ -148,7 +148,7 @@ test('Besondere Gebiete: Strand, Berge, Wald, Öl, Goldader – Gebäude nur dor
  const noForest=all.find(a=>!a.f.includes('forest'));let spot=null;for(let y=noForest.sy*SEC;y<noForest.sy*SEC+13&&!spot;y++)for(let x=noForest.sx*SEC;x<noForest.sx*SEC+13;x++){let ok2=true;for(let j=0;j<3;j++)for(let i=0;i<3;i++)if(!['grass','tree'].includes(tile(g,x+i,y+j).t))ok2=false;if(ok2){spot={x,y};break;}}
  if(spot)assert.match(bad(g,{type:'build',tool:'naturepark',...spot}),/Wald/);
  const forest=all.find(a=>a.f.includes('forest'));let fs=null;for(let y=forest.sy*SEC;y<forest.sy*SEC+13&&!fs;y++)for(let x=forest.sx*SEC;x<forest.sx*SEC+13;x++){let ok2=true;for(let j=0;j<3;j++)for(let i=0;i<3;i++)if(!['grass','tree'].includes(tile(g,x+i,y+j).t))ok2=false;if(ok2){fs={x,y};break;}}
- if(fs){const m=g.money;g=ok(g,{type:'build',tool:'naturepark',...fs});assert.equal(m-g.money,tool('naturepark').cost,'Bäume bleiben stehen, kein Fällen');}
+ if(fs){g.achv=Object.fromEntries(ACHIEVEMENTS.map(a=>[a.id,1]));const m=g.money;g=ok(g,{type:'build',tool:'naturepark',...fs});assert.equal(m-g.money,tool('naturepark').cost,'Bäume bleiben stehen, kein Fällen');}
  const oilS=all.find(a=>a.f.includes('oil'));if(oilS){let o=null;for(let y=oilS.sy*SEC;y<oilS.sy*SEC+16&&!o;y++)for(let x=oilS.sx*SEC;x<oilS.sx*SEC+16;x++)if(['grass','tree','rock'].includes(tile(g,x,y).t)){o={x,y};break;}g=ok(g,{type:'build',tool:'oil',...o});assert.ok(trade(g).list.some(l=>l.id==='oil'));}});
 
 test('Goldader: Minen bringen dort das Doppelte',()=>{
@@ -161,3 +161,13 @@ test('Handel: Anschluss verkauft teurer an Nachbarn, gesuchte Ware noch mehr',()
  g=ok(g,{type:'build',tool:'quarry',x:x0,y:y0});const t0=trade(g);assert.equal(t0.cap,0);assert.equal(t0.revenue,Math.round(t0.units*LOCAL_PRICE));
  const p=free(g);g=ok(g,{type:'build',tool:'depot',...p});const t1=trade(g);assert.ok(t1.cap>0);assert.ok(t1.revenue>t0.revenue);
  const w=wanted(T0);assert.equal(Object.keys(w).length,4);assert.notDeepEqual(wanted(T0),wanted(T0+31*MIN))||true;});
+
+import {ACHIEVEMENTS} from '../js/engine.mjs';
+test('Erfolge: werden einmal vergeben, bringen Belohnung; alte Städte bekommen Erreichtes still',()=>{
+ let g=newGame(T0);assert.ok(ACHIEVEMENTS.length>=25);assert.deepEqual(g.achv,{});
+ fill(g,120,{t:'house',lvl:2});const m=g.money;g=update(g,T0+1000);assert.ok(g.achv.pop100);assert.ok(g.newAchv.includes('pop100'));
+ const a=ACHIEVEMENTS.find(x=>x.id==='pop100');assert.ok(g.money>=m+a.reward);const m2=g.money;g=update(g,T0+2000);assert.equal(g.newAchv.filter(x=>x==='pop100').length,1);
+ g=ok(g,{type:'seenAchv'});assert.equal(g.newAchv.length,0);
+ const old=newGame(T0);fill(old,1200,{t:'house',lvl:3});delete old.achv;const r=restore(JSON.stringify(old));assert.ok(r.achv.pop1000);assert.equal(r.newAchv.length,0);});
+test('Stadtwappen wird gespeichert und bereinigt',()=>{let g=newGame(T0);g=ok(g,{type:'setCrest',crest:{shape:1,c1:'#ff0000',c2:'#00ff00',sym:'🦁',split:2}});
+ assert.deepEqual(g.crest,{shape:1,c1:'#ff0000',c2:'#00ff00',sym:'🦁',split:2});});

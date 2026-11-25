@@ -145,6 +145,36 @@ export function taskProgress(g,t){if(t.k==='pop')return{have:population(g),need:
 export function taskDone(g,t){const p=taskProgress(g,t);return p.have>=p.need;}
 function refreshTasks(g){g.tasks=(g.tasks||[]).filter(Boolean);while(g.tasks.length<TASKS_ACTIVE){const t=newTask(g);if(!t)break;g.tasks.push(t);}}
 
+// ---------- Erfolge ----------
+const anyHouse=(g,l)=>g.tiles.some(c=>c.t==='house'&&c.lvl>=l),anyLanes=(g,l)=>g.tiles.some(c=>c.t==='road'&&(c.lanes||1)>=l);
+const mines=['quarry','coal','ore','gold','oil'];
+export const ACHIEVEMENTS=[
+ ...[100,1000,10000,50000,100000,250000,500000].map((n,i)=>({id:'pop'+n,icon:['🏡','🏘️','🏙️','🌆','🌃','🌇','🌍'][i],name:`${n.toLocaleString('de-DE')} Einwohner`,text:`Deine Stadt hat ${n.toLocaleString('de-DE')} Einwohner.`,reward:200+i*i*3000,ok:g=>population(g)>=n})),
+ ...[5,10,25,50,75,100].map((n,i)=>({id:'lvl'+n,icon:['🥉','🥈','🥇','🏆','👑','💎'][i],name:`Level ${n}`,text:`Stadt-Level ${n} erreicht.`,reward:500+i*i*5000,ok:g=>cityLevel(g)>=n})),
+ {id:'tut',icon:'🎓',name:'Gut eingewiesen',text:'Die Einführung geschafft.',reward:300,ok:g=>g.tut?.done&&g.stats.road>0},
+ {id:'power',icon:'⚡',name:'Es werde Licht',text:'Das erste Kraftwerk gebaut.',reward:300,ok:g=>built(g,'power')+built(g,'wind')+built(g,'solar')>0},
+ {id:'sky',icon:'🏢',name:'Wolkenkratzer',text:'Das erste Haus auf Stufe 6.',reward:5000,ok:g=>anyHouse(g,6)},
+ {id:'mega',icon:'🗼',name:'Megaturm',text:'Ein Haus auf der höchsten Stufe.',reward:30000,ok:g=>anyHouse(g,7)},
+ {id:'lanes2',icon:'🛤️',name:'Mehr Spuren',text:'Die erste zweispurige Straße.',reward:500,ok:g=>anyLanes(g,2)},
+ {id:'autobahn',icon:'🛣️',name:'Stadtautobahn',text:'Die erste Stadtautobahn gebaut.',reward:10000,ok:g=>anyLanes(g,4)},
+ {id:'land1',icon:'🗺️',name:'Landbesitzer',text:'Das erste Gebiet gekauft.',reward:2000,ok:g=>boughtLand(g)>=1},
+ {id:'land10',icon:'🧭',name:'Großgrundbesitzer',text:'10 Gebiete gekauft.',reward:20000,ok:g=>boughtLand(g)>=10},
+ {id:'landall',icon:'🌐',name:'Die ganze Welt',text:'Alle Gebiete gehören dir.',reward:500000,ok:g=>g.land.every(v=>v===1)},
+ {id:'mine',icon:'⛏️',name:'Glück auf!',text:'Die erste Mine oder den ersten Ölbohrturm gebaut.',reward:1500,ok:g=>mines.some(m=>built(g,m))},
+ {id:'goldmine',icon:'💰',name:'Goldrausch',text:'Eine Goldmine gebaut.',reward:30000,ok:g=>built(g,'gold')>0},
+ {id:'trade',icon:'🚚',name:'Handelspartner',text:'Waren zu den Nachbarstädten gebracht.',reward:2000,ok:g=>info(g).cap>0&&trade(g).used>0},
+ {id:'tradebig',icon:'🚢',name:'Handelsmacht',text:'2.000 Waren pro Minute transportiert.',reward:50000,ok:g=>trade(g).used>=2000},
+ {id:'happy',icon:'😄',name:'Glückliche Stadt',text:'90 % Zufriedenheit bei mindestens 500 Einwohnern.',reward:5000,ok:g=>population(g)>=500&&happiness(g)>=90},
+ {id:'tourist',icon:'🧳',name:'Urlaubsparadies',text:'1.000 Taler pro Minute durch Touristen.',reward:20000,ok:g=>tourism(g)>=1000},
+ {id:'million',icon:'🤑',name:'Millionär',text:'1 Million Taler in der Stadtkasse.',reward:0,ok:g=>g.money>=1e6},
+ {id:'tasks10',icon:'📋',name:'Fleißig',text:'10 Aufträge erledigt.',reward:3000,ok:g=>(g.stats.tasks||0)>=10},
+ {id:'tasks50',icon:'🗂️',name:'Bürgermeister des Jahres',text:'50 Aufträge erledigt.',reward:30000,ok:g=>(g.stats.tasks||0)>=50},
+ {id:'airport',icon:'✈️',name:'Abheben!',text:'Einen Flughafen gebaut.',reward:20000,ok:g=>built(g,'airport')+built(g,'bigairport')>0},
+ {id:'space',icon:'🚀',name:'Ins All',text:'Das Raumfahrtzentrum gebaut.',reward:100000,ok:g=>built(g,'space')>0},
+ {id:'spaceport',icon:'🛸',name:'Zu den Sternen',text:'Den Weltraumbahnhof gebaut.',reward:0,ok:g=>built(g,'spaceport')>0}];
+function achievements(g,now){g.achv=g.achv||{};for(const a of ACHIEVEMENTS){if(g.achv[a.id])continue;let ok=false;try{ok=a.ok(g);}catch{}if(!ok)continue;
+ g.achv[a.id]=now;g.money+=a.reward;(g.newAchv=g.newAchv||[]).push(a.id);}}
+
 // ---------- Ereignisse ----------
 function events(g,now){if(!g.nextEvent){g.nextEvent=now+(EVENT_MIN[0]+rand(g)*(EVENT_MIN[1]-EVENT_MIN[0]))*MIN;return;}if(now<g.nextEvent||population(g)<20)return;
  const ok=EVENTS.filter(e=>(!e.minHappy||happiness(g)>=e.minHappy)&&(!e.minAttr||attractiveness(g)>=e.minAttr)),e=ok[Math.floor(rand(g)*ok.length)];
@@ -153,7 +183,7 @@ function events(g,now){if(!g.nextEvent){g.nextEvent=now+(EVENT_MIN[0]+rand(g)*(E
 
 // ---------- Spielstand ----------
 export function newGame(now=Date.now(),{cityName='Neustadt'}={},seed=Math.floor(now%2147483647)||1){
- const g={version:VERSION,tax:TAX_DEFAULT,level:1,levelUps:[],city:{name:String(cityName).trim().slice(0,30)||'Neustadt'},money:START_MONEY,seed:seed>>>0,tiles:null,start:null,land:startLand(),secrets:null,tasks:[],events:[],stats:{},rev:0,createdAt:now,lastAt:now,earned:0};
+ const g={version:VERSION,tax:TAX_DEFAULT,level:1,levelUps:[],city:{name:String(cityName).trim().slice(0,30)||'Neustadt'},money:START_MONEY,seed:seed>>>0,tiles:null,start:null,land:startLand(),secrets:null,achv:{},crest:null,tasks:[],events:[],stats:{},rev:0,createdAt:now,lastAt:now,earned:0};
  makeMap(g);g.secrets=makeSecrets(g);refreshTasks(g);return update(g,now);}
 export function update(g,now){const dt=Math.max(0,Math.min(now-(g.lastAt||now),OFFLINE_MAX_H*H));
  if(dt>0){const inc=incomePerMin(g)*dt/MIN;g.money=Math.round((g.money+inc)*100)/100;if(inc>0)g.earned=(g.earned||0)+inc;if(g.money<0)g.money=0;}
@@ -164,13 +194,13 @@ export function update(g,now){const dt=Math.max(0,Math.min(now-(g.lastAt||now),O
   if(c.ready&&c.ready<=now){if(okHere){g.tiles[i]={t:kind,lvl:1,since:c.ready};changed=true;stat(g,'built_'+kind);
     if(kind==='house')dem.house-=LEVELS[1].people*WORKER_SHARE;else{const j=BIZ[kind].jobs[1];dem[kind]-=j;dem.house+=j;}}else g.tiles[i]={t:c.t};}
   else if(!c.ready&&okHere)g.tiles[i]={...c,ready:now+moveIn(g)};}
- if(changed)touch(g);levelUp(g);events(g,now);
+ if(changed)touch(g);levelUp(g);events(g,now);if(g.achv)achievements(g,now);
  g.lastAt=Math.max(g.lastAt||0,now);return g;}
 export function restore(raw){try{const g=typeof raw==='string'?JSON.parse(raw):raw;if(!g||g.version!==VERSION||!Array.isArray(g.tiles))return null;
  const old=OLD_MAPS.find(n=>g.tiles.length===n*n);if(old)migrate(g,old);else if(g.tiles.length!==MAP_W*MAP_H)return null;
  for(const c of g.tiles)if(c.t==='road'&&!c.lanes)c.lanes=1;
  g.stats=g.stats||{};g.level=g.level||1;g.levelUps=g.levelUps||[];g.rev=g.rev||0;if(g.tax===undefined)g.tax=TAX_DEFAULT;
- if(!Array.isArray(g.land)||g.land.length!==SECTORS*SECTORS)g.land=startLand();if(!Array.isArray(g.secrets))g.secrets=makeSecrets(g);g.events=g.events||[];refreshTasks(g);return g;}catch{return null;}}
+ if(!Array.isArray(g.land)||g.land.length!==SECTORS*SECTORS)g.land=startLand();if(!Array.isArray(g.secrets))g.secrets=makeSecrets(g);if(!g.achv){g.achv={};achievements(g,Date.now());g.newAchv=[];}/* alte Städte: bereits Erreichtes still eintragen */g.events=g.events||[];refreshTasks(g);return g;}catch{return null;}}
 const moveIn=g=>Math.round((MOVE_IN_SEC[0]+rand(g)*(MOVE_IN_SEC[1]-MOVE_IN_SEC[0]))*1000);
 function stat(g,k,n=1){g.stats[k]=(g.stats[k]||0)+n;}
 function pay(g,n,what){if(g.money<n)throw new Error(`Dafür fehlt Geld: ${what} kostet ${Math.ceil(n).toLocaleString('de-DE')} Taler.`);g.money=Math.round((g.money-n)*100)/100;}
@@ -221,12 +251,14 @@ const A={
   g.money+=t.reward;stat(g,'tasks');g.tasks=g.tasks.filter(x=>x.id!==id);refreshTasks(g);return`✅ Auftrag erledigt: +${t.reward.toLocaleString('de-DE')} Taler!`;},
  skipTask(g,{id}){g.tasks=(g.tasks||[]).filter(x=>x.id!==id);refreshTasks(g);return null;},
  seenEvents(g){g.events=[];return null;},
+ seenAchv(g){g.newAchv=[];return null;},
+ setCrest(g,{crest}){const c=crest||{};g.crest={shape:+c.shape%3||0,c1:String(c.c1||'#2f6fb0').slice(0,9),c2:String(c.c2||'#f1c40f').slice(0,9),sym:String(c.sym||'🏰').slice(0,4),split:+c.split%3||0};return'Das Wappen ist gespeichert. 🛡️';},
  setTax(g,{tax}){const t=Math.round(+tax);if(!(t>=TAX_MIN&&t<=TAX_MAX))throw new Error(`Der Steuersatz muss zwischen ${TAX_MIN} und ${TAX_MAX} % liegen.`);g.tax=t;touch(g);return null;},
  seenLevelUps(g){g.levelUps=[];return null;},
  renameCity(g,{name}){const n=String(name||'').trim().slice(0,30);if(n.length<2)throw new Error('Der Name ist zu kurz.');g.city.name=n;return`Deine Stadt heißt jetzt ${n}.`;}};
 
 // Schnelle Kopie: Felder werden nur ersetzt, nie verändert (siehe own()) – so bleibt das Ziehen von Straßen flüssig
-function copy(game){const g={...game,tiles:game.tiles.slice(),land:game.land.slice(),secrets:game.secrets?.slice(),stats:{...game.stats},city:{...game.city},start:{...game.start},
+function copy(game){const g={...game,achv:{...(game.achv||{})},newAchv:[...(game.newAchv||[])],crest:game.crest?{...game.crest}:game.crest,tiles:game.tiles.slice(),land:game.land.slice(),secrets:game.secrets?.slice(),stats:{...game.stats},city:{...game.city},start:{...game.start},
  tasks:(game.tasks||[]).map(t=>({...t})),events:[...(game.events||[])],levelUps:[...(game.levelUps||[])]};const c=cache.get(game);if(c)cache.set(g,c);return g;}
 const own=(g,x,y)=>{const i=idx(x,y);return g.tiles[i]={...g.tiles[i]};};
 export function act(game,action,now=Date.now()){const g=update(copy(game),now);
