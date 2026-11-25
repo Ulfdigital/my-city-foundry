@@ -183,3 +183,13 @@ test('Schienen: verlegen, Bahnübergang und Zug zwischen zwei Bahnhöfen',async(
  const net=railNet(g);assert.equal(net.tours.length,1);assert.equal(net.tours[0].legs.length,2);
  const cars=trainCars(g,net,net.tours[0].legs[0].travel*0.5);assert.equal([...cars.cell.values(),...cars.stn.values()].flat().length,3);
  g=ok(g,{type:'build',tool:'bulldoze',x:X+4,y:Y});assert.equal(railNet(g).tours.length,2,'Strecke unterbrochen: zwei Züge, jeder fährt bis zu seinem Prellbock');});
+test('Laden entsteht bei Häusern ohne Laden, auch wenn die Stadt genug Läden hat',async()=>{const {demand,shopNeededHere}=await import('../js/engine.mjs');
+ let g=newGame(T0);const s=g.start;g.tiles[(s.y+3)*MAP_W+s.x]={t:'shop',lvl:6};g.rev++;   // großer Laden am Start: keine Nachfrage mehr
+ assert.ok(demand(g).shop<=0);
+ // weit weg: Straße, zwei Häuser, ein Gewerbegebiet – alles ohne Laden in Reichweite
+ const X=s.x+14,Y=s.y-10;for(let x=X-1;x<=X+3;x++){g.tiles[Y*MAP_W+x]={t:'road'};g.tiles[(Y+1)*MAP_W+x]={t:'grass'};}
+ g.tiles[(Y+1)*MAP_W+X]={t:'house',lvl:3};g.tiles[(Y+1)*MAP_W+X+1]={t:'house',lvl:3};g.tiles[(Y+1)*MAP_W+X+2]={t:'zonec'};g.tiles[(Y+1)*MAP_W+X+3]={t:'zonec'};g.rev++;
+ assert.ok(shopNeededHere(g,X+2,Y+1));
+ g=update(g,T0+1000);g=update(g,T0+60*MIN);
+ const shops=[X+2,X+3].filter(x=>tile(g,x,Y+1).t==='shop').length;assert.equal(shops,1,'genau ein Laden für die Häuser');
+ assert.ok(covered(g,X,Y+1,'shop'));assert.ok(!shopNeededHere(g,X+3,Y+1));});

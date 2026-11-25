@@ -111,6 +111,9 @@ export function mood(g){const v=info(g),t=taxRate(g),out=[];
 // Nachfrage wie bei SimCity: > 0 heißt, es wird mehr davon gebraucht
 export function demand(g){const v=info(g),w=v.pop*WORKER_SHARE,hp=happiness(g);
  return{house:Math.round(v.jobs+FREE_WORKERS+Math.min(v.attr,150)*ATTR_MOVE-w+(hp-60)*Math.max(1,v.pop/400)),shop:Math.round(v.pop*SHOP_SHARE-v.jobsShop+3),factory:Math.round(v.pop*FACTORY_SHARE-v.jobsFactory+5)};}
+// Häuser ohne Laden in Reichweite? Dann wird ein Gewerbegebiet hier auch ohne Nachfrage in der ganzen Stadt bebaut
+export function shopNeededHere(g,x,y){const v=info(g),r=BIZ.shop.radius,cv=v.cover.shop;
+ for(let j=Math.max(0,y-r);j<=Math.min(MAP_H-1,y+r);j++)for(let i=Math.max(0,x-r);i<=Math.min(MAP_W-1,x+r);i++){const k=j*MAP_W+i;if(g.tiles[k].t==='house'&&cv?.[k]!==1)return true;}return false;}
 export function cityLevel(g){return g.level||1;}
 export function nextLevelPop(g){const l=cityLevel(g);return l<MAX_CITY_LEVEL?levelPop(l+1):null;}
 export function unlocked(g,id){return cityLevel(g)>=(tool(id)?.lvl||1);}
@@ -188,10 +191,11 @@ export function newGame(now=Date.now(),{cityName='Neustadt'}={},seed=Math.floor(
 export function update(g,now){const dt=Math.max(0,Math.min(now-(g.lastAt||now),OFFLINE_MAX_H*H));
  if(dt>0){const inc=incomePerMin(g)*dt/MIN;g.money=Math.round((g.money+inc)*100)/100;if(inc>0)g.earned=(g.earned||0)+inc;if(g.money<0)g.money=0;}
  // Grundstücke werden bebaut (Straße + Nachfrage, Fabriken brauchen Strom)
- const dem=demand(g);let changed=false;
+ const dem=demand(g),localShops=[];let changed=false;
  for(let i=0;i<g.tiles.length;i++){const c=g.tiles[i];const kind=ZONES[c.t];if(!kind)continue;const x=i%MAP_W,y=Math.floor(i/MAP_W);
-  const okHere=hasRoad(g,x,y)&&(kind!=='factory'||covered(g,x,y,'power'))&&dem[kind]>0;
-  if(c.ready&&c.ready<=now){if(okHere){g.tiles[i]={t:kind,lvl:1,since:c.ready};changed=true;stat(g,'built_'+kind);
+  const local=kind==='shop'&&dem.shop<=0&&!localShops.some(p=>Math.abs(p.x-x)<=BIZ.shop.radius&&Math.abs(p.y-y)<=BIZ.shop.radius)&&shopNeededHere(g,x,y);
+  const okHere=hasRoad(g,x,y)&&(kind!=='factory'||covered(g,x,y,'power'))&&(dem[kind]>0||local);
+  if(c.ready&&c.ready<=now){if(okHere){g.tiles[i]={t:kind,lvl:1,since:c.ready};changed=true;stat(g,'built_'+kind);if(local)localShops.push({x,y});
     if(kind==='house')dem.house-=LEVELS[1].people*WORKER_SHARE;else{const j=BIZ[kind].jobs[1];dem[kind]-=j;dem.house+=j;}}else g.tiles[i]={t:c.t};}
   else if(!c.ready&&okHere)g.tiles[i]={...c,ready:now+moveIn(g)};}
  if(changed)touch(g);levelUp(g);events(g,now);if(g.achv)achievements(g,now);
