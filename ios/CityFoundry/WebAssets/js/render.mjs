@@ -52,10 +52,59 @@ function roadMarks(ctx,g,x,y,cx,cy,c,t,cars){const n=[[1,0],[-1,0],[0,1],[0,-1]]
    if(L>=3){ctx.save();ctx.setLineDash([3,4]);ctx.strokeStyle='rgba(255,255,255,.6)';for(const o of[-5,5]){ctx.beginPath();ctx.moveTo(cx+px/len*o,cy+py/len*o);ctx.lineTo(e.x+px/len*o,e.y+py/len*o);ctx.stroke();}ctx.restore();}}
   else{ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(e.x,e.y);ctx.stroke();}});
  ctx.setLineDash([]);if(!any){ctx.fillStyle='rgba(255,255,255,.7)';ctx.fillRect(cx-2,cy-1,4,2);}
- // Autos: je mehr Verkehr, desto mehr
- if(cars&&any){const dirs=n.map((on,i)=>on?i:-1).filter(i=>i>=0),k=Math.min(6,Math.round(cars*4)),col=['#e74c3c','#3498db','#f1c40f','#ecf0f1','#2ecc71','#9b59b6'];
-  for(let m=0;m<k;m++){const d=dirs[m%dirs.length],e=ends[d],ph=((t/2200+m*0.37+(x*7+y*3)*0.13)%1),back=m%2;const s0=back?1-ph:ph;
-   const px=(e.y-cy),py=-(e.x-cx),len=Math.hypot(px,py)||1,o=back?-3:3;const X=cx+(e.x-cx)*s0+px/len*o,Y=cy+(e.y-cy)*s0+py/len*o;ctx.fillStyle=col[(m+x+y)%col.length];ctx.fillRect(X-2.2,Y-3,4.4,3.2);ctx.fillStyle='rgba(0,0,0,.25)';ctx.fillRect(X-2.2,Y+0.2,4.4,0.8);}}}
+ // Ampeln an Kreuzungen (3 oder 4 Straßen)
+ const crossing=n.filter(Boolean).length>=3;if(crossing)lights(ctx,cx,cy,x,y,t);
+ // Fahrzeuge: je mehr Verkehr, desto mehr. Vor roter Ampel bleiben sie stehen und fahren bei Grün weiter.
+ if(cars&&any){const dirs=n.map((on,i)=>on?i:-1).filter(i=>i>=0),k=Math.min(6,Math.round(cars*4));
+  for(let m=0;m<k;m++){const d=dirs[m%dirs.length],e=ends[d],back=m%2,axis=d<2?0:1;
+   // Fährt das Auto auf eine Kreuzung zu? Dann läuft seine Uhr nur bei Grün weiter (Auto steht bei Rot)
+   const nx=x+[1,-1,0,0][d],ny=y+[0,0,1,-1][d],toCross=!back&&isCrossing(g,nx,ny),here=crossing&&!toCross;
+   const clock=toCross?driveClock(t,axis,nx,ny):here?driveClock(t,axis,x,y):t;
+   if(here&&!green(t,axis,x,y)&&!back)continue;                 // auf der Kreuzung selbst: Querverkehr wartet
+   const ph=((clock/2200+m*0.37+(x*7+y*3)*0.13)%1);const s0=back?1-ph:ph;
+   const ux=(e.x-cx)/Math.hypot(e.x-cx,e.y-cy),uy=(e.y-cy)/Math.hypot(e.x-cx,e.y-cy),dir=back?-1:1;
+   const side=back?-3.4:3.4;                                        // zwei Fahrspuren: hin und zurück nebeneinander
+   const X=cx+(e.x-cx)*s0-ux*side,Y=cy+(e.y-cy)*s0+uy*side;
+   vehicle(ctx,X,Y,ux*dir,uy*dir,(m*7+x*3+y*5)%11,L);}}}
+// Kreuzung? (für Ampeln)
+function isCrossing(g,x,y){if(tile(g,x,y)?.t!=='road')return false;let k=0;for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]])if(tile(g,x+dx,y+dy)?.t==='road')k++;return k>=3;}
+const CYCLE=8000;   // Ampelphase: 8 Sekunden (je Richtung 3,4 s Grün, 0,6 s Gelb)
+const lightOff=(x,y)=>((x*1931+y*733)%CYCLE+CYCLE)%CYCLE;
+function phase(t,x,y){return(t+lightOff(x,y))%CYCLE;}
+function green(t,axis,x,y){const p=phase(t,x,y),h=CYCLE/2;return axis===0?p<h-600:p>=h&&p<CYCLE-600;}
+function yellow(t,axis,x,y){const p=phase(t,x,y),h=CYCLE/2;return axis===0?p>=h-600&&p<h:p>=CYCLE-600;}
+// Uhr, die nur bei Grün läuft: so stehen Autos bei Rot still und fahren bei Grün ohne Sprung weiter
+function driveClock(t,axis,x,y){const off=lightOff(x,y),T=t+off,full=Math.floor(T/CYCLE),p=T-full*CYCLE,h=CYCLE/2,run=h-600;
+ const start=axis===0?0:h,inPhase=Math.max(0,Math.min(run,p-start));return full*run*1.6+inPhase*1.6;}
+function lights(ctx,cx,cy,x,y,t){const poles=[[-TW/2+8,0,0],[TW/2-8,0,0],[0,-TH/2+4,1],[0,TH/2-4,1]];
+ for(const[ox,oy,axis]of poles){const px=cx+ox*0.75,py=cy+oy*0.75;ctx.strokeStyle='#4a4f55';ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(px,py-13);ctx.stroke();
+  ctx.fillStyle='#22262b';ctx.fillRect(px-2,py-19,4,8);const gr=green(t,axis,x,y),ye=yellow(t,axis,x,y);
+  ctx.fillStyle=!gr&&!ye?'#ff3b30':'#4a1a18';ctx.beginPath();ctx.arc(px,py-17.3,1.1,0,7);ctx.fill();
+  ctx.fillStyle=ye?'#ffcc00':'#4a3d10';ctx.beginPath();ctx.arc(px,py-15,1.1,0,7);ctx.fill();
+  ctx.fillStyle=gr?'#34c759':'#143d1e';ctx.beginPath();ctx.arc(px,py-12.7,1.1,0,7);ctx.fill();}
+}
+// Ein erkennbares Fahrzeug in Iso-Ansicht: Karosserie, Fenster, Dach, Räder. kind: Farbe/Typ (Bus, Lieferwagen)
+const CAR_COLORS=['#d63031','#0984e3','#fdcb6e','#f5f6fa','#00b894','#6c5ce7','#2d3436','#e17055','#74b9ff'];
+function vehicle(ctx,X,Y,ux,uy,kind,lanes){const bus=kind===9&&lanes>=2,van=kind===10,len=bus?9:van?6.5:5.2,wid=2.6,hgt=bus?6:van?4.6:2.6;
+ const qx=-ux,qy=uy;const pt=(a,b,h=0)=>[X+ux*a+qx*b,Y+uy*a+qy*b-h];   // a: längs, b: quer (andere Iso-Achse), h: Höhe
+ const poly=(ps,col)=>{ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(...ps[0]);for(const p of ps.slice(1))ctx.lineTo(...p);ctx.closePath();ctx.fill();};
+ const body=bus?'#f1c40f':van?'#ecf0f1':CAR_COLORS[kind%CAR_COLORS.length];
+ // Schatten und Räder
+ poly([pt(-len,-wid,-0.8),pt(len,-wid,-0.8),pt(len,wid,-0.8),pt(-len,wid,-0.8)],'rgba(0,0,0,.22)');
+ ctx.fillStyle='#1b1b1b';for(const[a,b]of[[-len*0.6,wid],[len*0.6,wid],[-len*0.6,-wid],[len*0.6,-wid]]){const p=pt(a,b,0.4);ctx.beginPath();ctx.arc(p[0],p[1],1.05,0,7);ctx.fill();}
+ // Seiten (dunkler) und Oberseite
+ poly([pt(-len,wid,0),pt(len,wid,0),pt(len,wid,hgt),pt(-len,wid,hgt)],shade(body,0.72));
+ poly([pt(len,-wid,0),pt(len,wid,0),pt(len,wid,hgt),pt(len,-wid,hgt)],shade(body,0.85));
+ poly([pt(-len,-wid,hgt),pt(len,-wid,hgt),pt(len,wid,hgt),pt(-len,wid,hgt)],body);
+ if(bus){for(let i=0;i<4;i++){const a=-len+1.5+i*4;poly([pt(a,wid,hgt*0.45),pt(a+2.8,wid,hgt*0.45),pt(a+2.8,wid,hgt*0.85),pt(a,wid,hgt*0.85)],'#8ec3e6');}return;}
+ if(van){poly([pt(len-2,-wid,hgt*0.55),pt(len,-wid,hgt*0.55),pt(len,wid,hgt*0.55),pt(len-2,wid,hgt*0.55)],'#8ec3e6');return;}
+ // Kabine mit Scheiben
+ const c0=-len*0.45,c1=len*0.35,ch=hgt+2.2;
+ poly([pt(c0,wid*0.85,hgt),pt(c1,wid*0.85,hgt),pt(c1-0.6,wid*0.75,ch),pt(c0+0.4,wid*0.75,ch)],'#9fd0f0');
+ poly([pt(c1,-wid*0.85,hgt),pt(c1,wid*0.85,hgt),pt(c1-0.6,wid*0.75,ch),pt(c1-0.6,-wid*0.75,ch)],'#b9def5');
+ poly([pt(c0+0.4,-wid*0.75,ch),pt(c1-0.6,-wid*0.75,ch),pt(c1-0.6,wid*0.75,ch),pt(c0+0.4,wid*0.75,ch)],shade(body,1.08));
+ // Scheinwerfer
+ const h1=pt(len,wid*0.6,hgt*0.5),h2=pt(len,-wid*0.6,hgt*0.5);ctx.fillStyle='#fff7c2';ctx.fillRect(h1[0]-0.5,h1[1]-0.5,1,1);ctx.fillRect(h2[0]-0.5,h2[1]-0.5,1,1);}
 
 function house(ctx,c,x,y,cx,cy,t){const v=hash(x,y),w=WALLS[Math.floor(v*WALLS.length)],roof=ROOFS[Math.floor(v*97)%ROOFS.length],gl=GLASS[Math.floor(v*31)%GLASS.length];
  const lit=true;
