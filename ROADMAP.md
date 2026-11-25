@@ -13,4 +13,5 @@
 | 0.7 | Besondere Gebiete (Strand, Berge, Wald, Öl, Goldader – vor dem Kauf sichtbar) mit Strandbad, Strandhotel, Naturpark, Seilbahn, Skigebiet, Ölbohrturm; Waren aus Fabriken und Minen; Handel mit 4 Nachbarstädten (wechselnde Wunschwaren +60 %), Speditionshof, Güterbahnhof, Hafen und Großflughafen als Transport; Lieferwagen auf den Straßen | **fertig** |
 | 0.8 | Ampeln am Straßenrand (Gehweg-Ecken), Einführung für neue Spieler (7 Schritte, Belohnung), Töne und Musik (abschaltbar), Tag und Nacht (20 Minuten, Lichter in Fenstern, Laternen, Scheinwerfer), Jahreszeiten nach Kalender (Schnee, Herbstlaub, Blüten), Wetter (Sonne, Wolken, Regen, Schnee) | **fertig** |
 | 0.9 | Spielstand sichern und übertragen (Code kopieren/teilen/laden), 34 Erfolge mit Medaillen und Belohnungen, Stadtwappen-Editor, Fußgänger, Boote, Flugzeuge, fahrende Züge am Bahnhof | **fertig** |
+| 0.9.1 | Willkommen zurück (Einnahmen, neue Einwohner, Level, Aufträge), Rückgängig-Knopf (bis 15 Schritte, ein Straßenzug = ein Schritt), Übersichtskarte zum Springen | **fertig** |
 | 1.0 | App Store: Texte, Bildschirmfotos, Video, Datenschutz-Angaben, Einreichung | geplant |
