@@ -1,7 +1,7 @@
 // My City Foundry – Spieldaten. Stadtaufbau ab etwa 10 Jahren.
 export const VERSION=1;
 export const SAVE_KEY='my-city-foundry-v1';   // nie ändern – sonst ist der Spielstand weg
-export const BUILD='0.6.1';                    // muss zu package.json und version.json passen (Update-Prüfung in der App)
+export const BUILD='0.7.0';                    // muss zu package.json und version.json passen (Update-Prüfung in der App)
 export const MAP_W=128,MAP_H=128;             // ganze Welt
 export const OLD_MAPS=[40,64];                 // ältere Städte (0.1/0.2: 40×40, 0.3/0.4: 64×64) ziehen in die Mitte der Welt
 // ---------- Gebiete: Welt in 8×8 Gebiete zu je 16×16 Feldern; die Mitte (4×4 Gebiete = 64×64) gehört dir von Anfang an ----------
@@ -63,7 +63,7 @@ export const TOOLS=[
  {id:'cityhall',group:'special',name:'Rathaus',icon:'🏛️',cost:5000,upkeep:5,size:2,lvl:7,jobs:40,attr:10,once:true},
  {id:'museum',group:'special',name:'Museum',icon:'🖼️',cost:12000,upkeep:6,size:2,lvl:18,jobs:30,attr:12,tour:50},
  {id:'stadium',group:'special',name:'Stadion',icon:'🏟️',cost:30000,upkeep:15,size:3,lvl:20,jobs:120,attr:25,tour:120,once:true,dirt:2},
- {id:'harbor',group:'special',name:'Hafen',icon:'⚓',cost:35000,upkeep:15,size:2,lvl:30,jobs:600,attr:8,tour:60,once:true,nearWater:true,dirt:2},
+ {id:'harbor',group:'special',name:'Hafen',icon:'⚓',cost:35000,upkeep:15,size:2,lvl:30,jobs:600,attr:8,tour:60,once:true,nearWater:true,dirt:2,cap:2500},
  {id:'hotel',group:'special',name:'Hotel',icon:'🏨',cost:15000,upkeep:6,size:2,lvl:32,jobs:150,attr:6,tour:90},
  {id:'expo',group:'special',name:'Messe',icon:'🎪',cost:45000,upkeep:15,size:3,lvl:36,jobs:400,attr:15,tour:200,once:true},
  {id:'tvtower',group:'special',name:'Fernsehturm',icon:'🗼',cost:50000,upkeep:8,lvl:38,jobs:40,attr:30,tour:150,once:true},
@@ -78,14 +78,24 @@ export const TOOLS=[
  {id:'opera',group:'special',name:'Opernhaus',icon:'🎭',cost:900000,upkeep:60,size:2,lvl:92,jobs:600,attr:90,tour:6000,once:true},
  {id:'skytower',group:'special',name:'Aussichtsturm',icon:'🗼',cost:150000,upkeep:15,size:2,lvl:62,jobs:150,attr:40,tour:500,once:true},
  {id:'cruise',group:'special',name:'Kreuzfahrthafen',icon:'🛳️',cost:300000,upkeep:40,size:3,lvl:70,jobs:1500,attr:45,tour:1800,once:true,nearWater:true,dirt:2},
- {id:'bigairport',group:'special',name:'Großflughafen',icon:'🛫',cost:600000,upkeep:120,size:3,lvl:78,jobs:8000,attr:60,tour:4000,once:true,dirt:5},
+ {id:'bigairport',group:'special',name:'Großflughafen',icon:'🛫',cost:600000,upkeep:120,size:3,lvl:78,jobs:8000,attr:60,tour:4000,once:true,dirt:5,cap:3000},
  {id:'olympia',group:'special',name:'Olympiastadion',icon:'🏅',cost:800000,upkeep:80,size:3,lvl:86,jobs:1500,attr:80,tour:5000,once:true,dirt:2},
  {id:'spaceport',group:'special',name:'Weltraumbahnhof',icon:'🛸',cost:2000000,upkeep:200,size:3,lvl:100,jobs:20000,attr:150,tour:20000,once:true},
+ // Besondere Gebiete (0.7) – nur dort, wo das Gebiet die Besonderheit hat
+ {id:'beach',group:'fun',name:'Strandbad',icon:'🏖️',cost:6000,upkeep:4,radius:6,provides:'park',size:2,lvl:15,jobs:20,attr:12,tour:120,feature:'beach',nearWater:true},
+ {id:'beachhotel',group:'special',name:'Strandhotel',icon:'🏝️',cost:30000,upkeep:10,size:2,lvl:25,jobs:150,attr:15,tour:400,feature:'beach',nearWater:true},
+ {id:'naturepark',group:'fun',name:'Naturpark',icon:'🦌',cost:8000,upkeep:3,radius:10,provides:'park',size:3,lvl:18,jobs:15,attr:18,tour:150,feature:'forest',keepTrees:true},
+ {id:'cablecar',group:'fun',name:'Seilbahn',icon:'🚠',cost:20000,upkeep:6,lvl:22,jobs:30,attr:14,tour:250,feature:'mountain',onRock:true},
+ {id:'ski',group:'fun',name:'Skigebiet',icon:'⛷️',cost:70000,upkeep:20,size:3,lvl:35,jobs:250,attr:30,tour:900,feature:'mountain',onRock:true},
+ {id:'oil',group:'mine',name:'Ölbohrturm',icon:'🛢️',cost:25000,upkeep:10,lvl:30,jobs:60,prod:500,good:'oil',dirt:3,feature:'oil',anyGround:true},
+ // Handel: Anschlüsse zu den Nachbarstädten (cap = Waren pro Minute)
+ {id:'depot',group:'mine',name:'Speditionshof',icon:'🚚',cost:4000,upkeep:4,lvl:14,jobs:40,cap:150,dirt:1},
+ {id:'freight',group:'mine',name:'Güterbahnhof',icon:'🚂',cost:30000,upkeep:12,size:2,lvl:26,jobs:150,cap:900,dirt:2},
  // Bergbau – nur auf Fels (in den Bergen der Außengebiete)
- {id:'quarry',group:'mine',name:'Steinbruch',icon:'🪨',cost:3000,upkeep:3,lvl:14,jobs:40,prod:40,dirt:2,onRock:true},
- {id:'coal',group:'mine',name:'Kohlemine',icon:'⛏️',cost:12000,upkeep:8,size:2,lvl:24,jobs:200,prod:220,dirt:3,onRock:true},
- {id:'ore',group:'mine',name:'Erzmine',icon:'⚒️',cost:40000,upkeep:15,size:2,lvl:38,jobs:500,prod:700,dirt:3,onRock:true},
- {id:'gold',group:'mine',name:'Goldmine',icon:'💰',cost:150000,upkeep:30,size:2,lvl:58,jobs:900,prod:2600,dirt:2,onRock:true}];
+ {id:'quarry',group:'mine',name:'Steinbruch',icon:'🪨',cost:3000,upkeep:3,lvl:14,jobs:40,prod:40,good:'stone',dirt:2,onRock:true},
+ {id:'coal',group:'mine',name:'Kohlemine',icon:'⛏️',cost:12000,upkeep:8,size:2,lvl:24,jobs:200,prod:220,good:'coal',dirt:3,onRock:true},
+ {id:'ore',group:'mine',name:'Erzmine',icon:'⚒️',cost:40000,upkeep:15,size:2,lvl:38,jobs:500,prod:700,good:'ore',dirt:3,onRock:true},
+ {id:'gold',group:'mine',name:'Goldmine',icon:'💰',cost:150000,upkeep:30,size:2,lvl:58,jobs:900,prod:2600,good:'gold',dirt:2,onRock:true}];
 export const ROAD_LANES=[null,{name:'Straße',cap:60,cost:10},{name:'Zweispurige Straße',cap:160,cost:60,lvl:6},{name:'Dreispurige Straße',cap:400,cost:200,lvl:18},{name:'Stadtautobahn',cap:1000,cost:600,lvl:32}];
 export const ROCK_ROAD=3;                       // Straße auf Fels kostet das Dreifache
 export const TRAFFIC_PER_PERSON=0.35,TRAFFIC_PER_JOB=0.25;   // Verkehr, den Einwohner und Arbeitsplätze erzeugen
@@ -144,3 +154,17 @@ export const EVENTS=[
  {id:'prize',icon:'🏆',title:'Preis für die schönste Stadt',text:'Deine Stadt gewinnt einen Wettbewerb.',money:m=>m*10,minAttr:30},
  {id:'donor',icon:'💌',title:'Spende eines Bürgers',text:'Eine Bürgerin hat im Lotto gewonnen und spendet einen Teil der Stadt.',money:m=>m*4+300}];
 export const citySize=p=>[...CITY_SIZES].reverse().find(c=>p>=c.min);
+
+// ---------- Besondere Gebiete und Handel (0.7) ----------
+// Besonderheiten eines Gebiets (16×16): ergeben sich aus der Landschaft + versteckte Schätze (Öl, Goldader)
+export const FEATURES={beach:{icon:'🏖️',name:'Strand',text:'Strandbad und Strandhotel möglich'},mountain:{icon:'⛰️',name:'Berge',text:'Bergbau, Seilbahn und Skigebiet möglich'},
+ forest:{icon:'🌲',name:'Wald',text:'Naturpark möglich'},oil:{icon:'🛢️',name:'Öl',text:'Ölbohrturm möglich'},goldvein:{icon:'💰',name:'Goldader',text:'Minen bringen hier das Doppelte'}};
+export const GOLDVEIN_BONUS=2;
+// Waren: Wert pro Einheit. Fabriken stellen „Waren“ her (pro Arbeitsplatz), Minen ihre Rohstoffe.
+export const GOODS={goods:{icon:'📦',name:'Waren',value:1},stone:{icon:'🪨',name:'Steine',value:1},coal:{icon:'⚫',name:'Kohle',value:1},ore:{icon:'🔩',name:'Erz',value:1},gold:{icon:'🥇',name:'Gold',value:1},oil:{icon:'🛢️',name:'Öl',value:1}};
+export const FACTORY_GOODS=0.15;               // Waren pro Fabrik-Arbeitsplatz und Minute
+export const LOCAL_PRICE=0.8;                   // ohne Handelsanschluss: Verkauf in der eigenen Stadt (80 %)
+export const TRADE_PRICE=1.4;                   // über Spedition, Güterbahnhof, Hafen, Flughafen an die Nachbarn (140 %)
+export const WANTED_BONUS=1.6;                  // gesuchte Ware bei Nachbarn: +60 %
+export const WANTED_MIN=30;                     // alle 30 Minuten wünschen sich die Nachbarn etwas anderes
+export const NEIGHBORS=[{id:'n',name:'Bergheim',icon:'🏔️'},{id:'e',name:'Seestadt',icon:'⚓'},{id:'s',name:'Sonnental',icon:'🌻'},{id:'w',name:'Eichenhain',icon:'🌳'}];

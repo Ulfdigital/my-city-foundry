@@ -1,6 +1,6 @@
 // My City Foundry – Oberfläche: Karte zum Verschieben/Zoomen, Werkzeugleiste, Infofenster. Speichert automatisch auf dem Gerät.
-import {SAVE_KEY,TOOLS,GROUPS,tool,LEVELS,MAX_LEVEL,NEEDS,TREE_CLEAR,citySize,MAP_W,MAP_H,BIZ,bizMax,BUILD,levelPop,MAX_CITY_LEVEL,TAX_MIN,TAX_MAX,TAX_DEFAULT,happyText,happyIcon,HAPPY_MIN,SECTOR,ROAD_LANES,LAND_LEVEL} from './data.mjs';
-import {newGame,act,update,restore,tile,population,incomePerMin,missing,has,hasRoad,counts,cityLevel,nextLevelPop,unlocked,demand,jobs,maxLevel,upgradeCost,attractiveness,tourism,built,canPlace,happiness,mood,finances,taxRate,covered,owns,canBuy,sectorPrice,jam,taskProgress,taskDone} from './engine.mjs';
+import {SAVE_KEY,TOOLS,GROUPS,tool,LEVELS,MAX_LEVEL,NEEDS,TREE_CLEAR,citySize,MAP_W,MAP_H,BIZ,bizMax,BUILD,levelPop,MAX_CITY_LEVEL,TAX_MIN,TAX_MAX,TAX_DEFAULT,happyText,happyIcon,HAPPY_MIN,SECTOR,ROAD_LANES,LAND_LEVEL,FEATURES,GOODS,NEIGHBORS,TRADE_PRICE,LOCAL_PRICE,WANTED_BONUS} from './data.mjs';
+import {newGame,act,update,restore,tile,population,incomePerMin,missing,has,hasRoad,counts,cityLevel,nextLevelPop,unlocked,demand,jobs,maxLevel,upgradeCost,attractiveness,tourism,built,canPlace,happiness,mood,finances,taxRate,covered,owns,canBuy,sectorPrice,jam,taskProgress,taskDone,features,trade,wanted,nextWantedChange} from './engine.mjs';
 import {draw,screenToCell,centerOn,cellTop,TW,TH} from './render.mjs';
 
 const $=s=>document.querySelector(s);
@@ -61,10 +61,11 @@ function apply(x,y,quiet){if(!game)return false;if(cur==='land'){if(!quiet)landP
 function line(a,b,fn){let{x,y}=a;fn(x,y);while(x!==b.x||y!==b.y){if(x!==b.x)x+=Math.sign(b.x-x);else y+=Math.sign(b.y-y);fn(x,y);}}
 
 // ---------- Infofenster ----------
-function landPanel(x,y){const p=$('#panel');delete p.dataset.modal;const sx=Math.floor(x/SECTOR),sy=Math.floor(y/SECTOR);sel=null;
- const html=owns(game,x,y)?'<h3>🗺️ Dein Land</h3><p>Dieses Gebiet gehört dir schon.</p>':!unlocked(game,'land')?`<h3>🗺️ Fremdes Land</h3><p>Land kaufen geht ab Stadt-Level ${LAND_LEVEL}.</p>`:
-  canBuy(game,sx,sy)?`<h3>🗺️ Gebiet kaufen</h3><p>16 × 16 Felder für Dörfer, Bergbau oder mehr Stadt.</p><button class="big" data-buyland="${sx},${sy}" ${game.money<sectorPrice(game)?'disabled':''}>Kaufen · ${fmt(sectorPrice(game))} Taler</button>`:
-  '<h3>🗺️ Zu weit weg</h3><p>Du kannst nur Gebiete kaufen, die direkt an dein Land grenzen (gelb markiert).</p>';
+function landPanel(x,y){const p=$('#panel');delete p.dataset.modal;const sx=Math.floor(x/SECTOR),sy=Math.floor(y/SECTOR);sel=null;const fs=features(game,sx,sy);
+ const feat=fs.length?`<ul class="needs">${fs.map(k=>`<li>${FEATURES[k].icon} <b>${FEATURES[k].name}</b> – ${FEATURES[k].text}</li>`).join('')}</ul>`:'<p class="muted">Keine Besonderheiten – Platz für Stadt oder Dorf.</p>';
+ const html=owns(game,x,y)?`<h3>🗺️ Dein Land</h3><p>Dieses Gebiet gehört dir schon.</p>${feat}`:!unlocked(game,'land')?`<h3>🗺️ Fremdes Land</h3><p>Land kaufen geht ab Stadt-Level ${LAND_LEVEL}.</p>`:
+  canBuy(game,sx,sy)?`<h3>🗺️ Gebiet kaufen</h3><p>16 × 16 Felder für Dörfer, Bergbau oder mehr Stadt.</p>${feat}<button class="big" data-buyland="${sx},${sy}" ${game.money<sectorPrice(game)?'disabled':''}>Kaufen · ${fmt(sectorPrice(game))} Taler</button>`:
+  `<h3>🗺️ Zu weit weg</h3><p>Du kannst nur Gebiete kaufen, die direkt an dein Land grenzen (gelb markiert).</p>${feat}`;
  p.innerHTML=`<button class="close" data-close aria-label="Schließen">✕</button>${html}`;p.classList.remove('hidden');}
 function panel(){const p=$('#panel');if(!sel){p.classList.add('hidden');return;}const c=tile(game,sel.x,sel.y);if(!c){sel=null;return panel();}
  let html='';if(!owns(game,sel.x,sel.y)){landPanel(sel.x,sel.y);return;}
@@ -84,7 +85,7 @@ function panel(){const p=$('#panel');if(!sel){p.classList.add('hidden');return;}
   html=`<h3>${shopz?'🛒 Gewerbegebiet':'🏭 Industriegebiet'}</h3><p>${!road?'❌ Es fehlt eine Straße direkt am Grundstück.':!pw?'❌ Fabriken brauchen Strom – bau ein Kraftwerk in der Nähe.':d<=0?`⏳ Gerade werden keine weiteren ${shopz?'Läden':'Fabriken'} gebraucht. Mehr Einwohner bringen mehr Nachfrage.`:(c.ready?'🚧 Hier wird gebaut!':'Bald entsteht hier etwas.')}</p>`;}
  else if(c.t==='zone')html=`<h3>🏡 Wohngebiet</h3><p>${!hasRoad(game,sel.x,sel.y)?'❌ Es fehlt eine Straße direkt am Grundstück. Ohne Straße zieht niemand ein.':demand(game).house<=0?'⏳ Gerade zieht niemand zu – es fehlen Arbeitsplätze. Bau Läden und Fabriken!':c.ready?'🚧 Hier wird gebaut – gleich ziehen Leute ein!':'Bald ziehen Leute ein.'}</p>`;
  else if(tool(c.t)?.cost&&!['road','bulldoze'].includes(c.t)){const t=tool(c.t);html=`<h3>${t.icon} ${t.name}</h3>${t.provides?`<p>Versorgt alles im Umkreis von ${t.radius} Feldern mit ${NEEDS[t.provides].icon} ${{power:'Strom',water:'Wasser',park:'Erholung',school:'Bildung',fire:'Brandschutz',police:'Sicherheit',hospital:'Gesundheit',bus:'Busverbindungen'}[t.provides]}.</p>`:''}
-  <ul class="needs">${t.jobs?`<li>💼 ${fmt(t.jobs)} Arbeitsplätze</li>`:''}${t.attr?`<li>⭐ Attraktivität ${t.attr>0?'+':''}${t.attr}</li>`:''}${t.tour?`<li>🧳 Touristen bringen ${fmt(t.tour)} Taler pro Minute</li>`:''}${t.prod?`<li>⛏️ Bergbau bringt ${fmt(t.prod)} Taler pro Minute</li>`:''}${t.dirt?`<li>🌫️ macht Dreck und Lärm im Umkreis von ${t.dirt} Feldern</li>`:''}<li>🔧 Kosten im Betrieb: ${t.upkeep||0} Taler pro Minute</li></ul>`;}
+  <ul class="needs">${t.jobs?`<li>💼 ${fmt(t.jobs)} Arbeitsplätze</li>`:''}${t.attr?`<li>⭐ Attraktivität ${t.attr>0?'+':''}${t.attr}</li>`:''}${t.tour?`<li>🧳 Touristen bringen ${fmt(t.tour)} Taler pro Minute</li>`:''}${t.prod?`<li>⛏️ fördert ${fmt(t.prod)} ${GOODS[t.good]?.name||'Rohstoffe'} pro Minute</li>`:''}${t.cap?`<li>🚚 transportiert ${fmt(t.cap)} Waren pro Minute zu den Nachbarstädten</li>`:''}${t.dirt?`<li>🌫️ macht Dreck und Lärm im Umkreis von ${t.dirt} Feldern</li>`:''}<li>🔧 Kosten im Betrieb: ${t.upkeep||0} Taler pro Minute</li></ul>`;}
  else if(c.t==='road'){const j=jam(game,sel.x,sel.y),L=c.lanes||1,nx=ROAD_LANES[L+1];html=`<h3>🛣️ ${ROAD_LANES[L].name}</h3><p>Verkehr: <b>${j>1?'🔴 Stau':j>0.7?'🟠 viel los':'🟢 frei'}</b> (${Math.round(j*100)} % ausgelastet)</p>
   ${nx?`<p class="muted">Mit „Straße ausbauen“ wird sie zur ${nx.name}${cityLevel(game)<nx.lvl?` (ab Level ${nx.lvl})`:` (${fmt(nx.cost)} Taler pro Feld)`}.</p>`:''}<p class="muted small">Bus, U-Bahn und Bahnhof entlasten die Straßen in der Nähe.</p>`;}
  else if(c.t==='rock')html='<h3>⛰️ Fels</h3><p>Hier geht nur Bergbau (Steinbruch, Kohle-, Erz- und Goldmine) oder eine Straße.</p>';
@@ -102,7 +103,7 @@ function levelUps(){const ups=game.levelUps||[];if(!ups.length||$('#panel').data
 
 // ---------- Neue Version? (wichtig für die App: Updates kommen von der Website) ----------
 async function checkUpdate(){try{const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'});if(!r.ok)return;const v=(await r.json()).build;
- if(v&&v!==BUILD){if(game)save();location.reload();}}catch{}}
+ if(v&&v!==BUILD){try{if(sessionStorage.getItem('reload-'+v))return;sessionStorage.setItem('reload-'+v,'1');}catch{}if(game)save();location.reload();}}catch{}}
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')checkUpdate();});
 setInterval(checkUpdate,10*60*1000);
 
@@ -139,17 +140,27 @@ function eventsModal(){const ev=game.events||[];if(!ev.length||$('#panel').datas
  const r=act(game,{type:'seenEvents'},Date.now());game=r.game;save();const p=$('#panel');p.dataset.modal='1';sel=null;
  p.innerHTML=`<div class="lvup"><div class="big-emo">${e.icon}</div><h3>${esc(e.title)}</h3><p>${esc(e.text)}</p><p><b>+${fmt(e.money)} Taler</b></p><button class="big" data-close>Super!</button></div>`;p.classList.remove('hidden');}
 
+// ---------- Handel ----------
+function tradePanel(){const p=$('#panel');delete p.dataset.modal;sel=null;const tr=trade(game,Date.now()),w=wanted(Date.now()),mins=Math.max(1,Math.ceil((nextWantedChange(Date.now())-Date.now())/6e4));
+ p.innerHTML=`<button class="close" data-close aria-label="Schließen">✕</button><h3>🚚 Handel mit Nachbarstädten</h3>
+  <div class="nbs">${NEIGHBORS.map(n=>`<div class="nb">${n.icon}<b>${n.name}</b><small>sucht ${GOODS[w[n.id]].icon} ${GOODS[w[n.id]].name}</small></div>`).join('')}</div>
+  <p class="muted small">Gesuchte Waren bringen +${Math.round((WANTED_BONUS-1)*100)} %. Die Wünsche wechseln in ${mins} Min.</p>
+  ${tr.list.length?`<ul class="fin">${tr.list.map(l=>`<li><span>${GOODS[l.id].icon} ${GOODS[l.id].name}${l.wanted?' ⭐':''} <small class="muted">${fmt(l.units)}/Min.</small></span><b class="pos">+${fmt(l.revenue)}</b></li>`).join('')}</ul>`:'<p>Noch keine Waren. Fabriken stellen Waren her, Minen und Ölbohrtürme Rohstoffe.</p>'}
+  <p><b>Transport:</b> ${fmt(tr.used)} von ${fmt(tr.units)} Einheiten pro Minute gehen an die Nachbarn.</p><span class="lvbar wide"><i style="width:${tr.units?Math.min(100,tr.cap/tr.units*100):0}%"></i></span>
+  <p class="muted small">Was nicht transportiert wird, verkauft deine Stadt selbst – aber nur für ${Math.round(LOCAL_PRICE*100)} %. Über die Nachbarn bekommst du ${Math.round(TRADE_PRICE*100)} %.
+  Mehr Transport: 🚚 Speditionshof, 🚂 Güterbahnhof, ⚓ Hafen, 🛫 Großflughafen (unter „Land“ und „Special“).</p>`;p.classList.remove('hidden');}
+
 // ---------- Finanzen und Zufriedenheit ----------
 function finance(){const p=$('#panel');delete p.dataset.modal;sel=null;const f=finances(game),h=happiness(game),t=taxRate(game);
  const row=(l,v,neg)=>`<li><span>${l}</span><b class="${neg||v<0?'neg':'pos'}">${neg||v<0?'−':'+'}${fmt(Math.abs(v))}</b></li>`;
  p.innerHTML=`<button class="close" data-close aria-label="Schließen">✕</button><h3>🪙 Stadtkasse</h3>
-  <ul class="fin">${row('👥 Steuern der Einwohner',f.people)}${row('🛒🏭 Steuern von Läden und Fabriken',f.biz)}${row('🧳 Touristen',f.tour)}${f.mines?row('⛏️ Bergbau',f.mines):''}${row('🔧 Unterhalt (Kraftwerke, Dienste …)',f.upkeep,true)}<li class="sum"><span>pro Minute</span><b class="${f.total<0?'neg':'pos'}">${f.total>=0?'+':''}${fmt(f.total)}</b></li></ul>
+  <ul class="fin">${row('👥 Steuern der Einwohner',f.people)}${row('🛒🏭 Steuern von Läden und Fabriken',f.biz)}${row('🧳 Touristen',f.tour)}${f.mines?row('🚚 Handel und Bergbau',f.mines):''}${row('🔧 Unterhalt (Kraftwerke, Dienste …)',f.upkeep,true)}<li class="sum"><span>pro Minute</span><b class="${f.total<0?'neg':'pos'}">${f.total>=0?'+':''}${fmt(f.total)}</b></li></ul>
   <label class="field taxf"><span>Steuersatz: <b id="taxv">${t} %</b> <small class="muted">(normal ${TAX_DEFAULT} %)</small></span><input type="range" id="tax" min="${TAX_MIN}" max="${TAX_MAX}" step="1" value="${t}"></label>
   <p class="muted small">Höhere Steuern bringen mehr Geld, machen die Bürger aber unzufrieden – dann ziehen weniger Leute her. Niedrige Steuern machen glücklich.</p>
   <h3>${happyIcon(h)} Zufriedenheit: ${h} % <em>${happyText(h)}</em></h3><span class="lvbar wide"><i style="width:${h}%;background:${h>=60?'var(--green)':h>=HAPPY_MIN?'var(--gold)':'var(--red)'}"></i></span>
   <ul class="fin">${mood(game).filter(m=>m.v).map(m=>row(m.text,m.v)).join('')||'<li>Alles im grünen Bereich.</li>'}</ul>
   <p class="muted small">Unter ${HAPPY_MIN} % wachsen keine Wohnblocks und Hochhäuser mehr.</p>
-  <button class="${showDirt?'on':''} wideb" data-dirt>🌫️ Dreck und Lärm auf der Karte ${showDirt?'ausblenden':'zeigen'}</button><button class="${showTraffic?'on':''} wideb traf" data-traffic>🚗 Verkehr und Stau ${showTraffic?'ausblenden':'zeigen'}</button>`;p.classList.remove('hidden');
+  <button class="wideb tradeb" data-trade>🚚 Handel mit Nachbarstädten</button><button class="${showDirt?'on':''} wideb" data-dirt>🌫️ Dreck und Lärm auf der Karte ${showDirt?'ausblenden':'zeigen'}</button><button class="${showTraffic?'on':''} wideb traf" data-traffic>🚗 Verkehr und Stau ${showTraffic?'ausblenden':'zeigen'}</button>`;p.classList.remove('hidden');
  $('#tax').oninput=e=>{$('#taxv').textContent=e.target.value+' %';};
  $('#tax').onchange=e=>{const r=act(game,{type:'setTax',tax:e.target.value},Date.now());if(r.error)return toast(r.error,'err');game=r.game;save();hud();finance();};}
 
@@ -164,7 +175,7 @@ function settings(){const p=$('#panel');delete p.dataset.modal;const n=counts(ga
 
 document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b||!game)return;const d=b.dataset;
  if(d.group){group=d.group;const ts=TOOLS.filter(t=>t.group===group);if(ts.length===1){cur=ts[0].id;if(cur!=='hand'){sel=null;panel();toast(cur==='bulldoze'?'Tippe auf etwas, das weg soll.':cur==='land'?(unlocked(game,'land')?'Tippe auf ein gelb markiertes Gebiet, um es zu kaufen.':`Land kaufen geht ab Stadt-Level ${LAND_LEVEL}.`):'Tippe oder ziehe mit dem Finger, um Straßen zu bauen.');}}else if(!ts.some(t=>t.id===cur))cur='hand';preview=null;return toolbar();}
- if(d.tool){if(!unlocked(game,d.tool)){const t=tool(d.tool);return toast(`${t.icon} ${t.name} gibt es ab Stadt-Level ${t.lvl}. Lass deine Stadt weiter wachsen!`);}cur=d.tool;preview=null;toolbar();if(cur!=='hand'){sel=null;panel();const t=tool(cur);toast(cur==='land'?'Tippe auf ein gelb markiertes Gebiet, um es zu kaufen.':cur==='lanes'?'Tippe oder ziehe über Straßen. Rot = Stau.':t.onRock?`${t.icon} ${t.name} geht nur auf Fels (graue Berge in den Außengebieten).`:t.size>1?`${t.icon} ${t.name} braucht ${t.size}×${t.size} freie Felder. Tippe auf die Mitte.`:t.once&&built(game,t.id)?`${t.name} gibt es nur einmal.`:cur==='zone'?'Lege Wohngebiete direkt an eine Straße.':cur==='zonec'?'Lege Läden an eine Straße – sie bringen Arbeitsplätze.':cur==='zonei'?'Fabriken brauchen Straße und Strom – und bringen viele Arbeitsplätze.':t.radius?`${t.name}: versorgt alles im Umkreis von ${t.radius} Feldern.`:`${t.icon} ${t.name}: Tippe auf einen freien Platz.`);}return;}
+ if(d.tool){if(!unlocked(game,d.tool)){const t=tool(d.tool);return toast(`${t.icon} ${t.name} gibt es ab Stadt-Level ${t.lvl}. Lass deine Stadt weiter wachsen!`);}cur=d.tool;preview=null;toolbar();if(cur!=='hand'){sel=null;panel();const t=tool(cur);toast(t.feature?`${t.icon} ${t.name} geht nur in Gebieten mit ${FEATURES[t.feature].icon} ${FEATURES[t.feature].name}. Schau unter „Land“, wo es die gibt.`:cur==='land'?'Tippe auf ein Gebiet: Die Symbole zeigen Strand, Berge, Wald, Öl und Goldadern.':cur==='lanes'?'Tippe oder ziehe über Straßen. Rot = Stau.':t.onRock?`${t.icon} ${t.name} geht nur auf Fels (graue Berge in den Außengebieten).`:t.size>1?`${t.icon} ${t.name} braucht ${t.size}×${t.size} freie Felder. Tippe auf die Mitte.`:t.once&&built(game,t.id)?`${t.name} gibt es nur einmal.`:cur==='zone'?'Lege Wohngebiete direkt an eine Straße.':cur==='zonec'?'Lege Läden an eine Straße – sie bringen Arbeitsplätze.':cur==='zonei'?'Fabriken brauchen Straße und Strom – und bringen viele Arbeitsplätze.':t.radius?`${t.name}: versorgt alles im Umkreis von ${t.radius} Feldern.`:`${t.icon} ${t.name}: Tippe auf einen freien Platz.`);}return;}
  if('close'in d){sel=null;delete $('#panel').dataset.modal;return panel();}
  if('upgrade'in d){const r=act(game,{type:'upgrade',x:sel.x,y:sel.y},Date.now());if(r.error)return toast(r.error,'err');game=r.game;save();toast(r.message,'gold');hud();panel();return levelUps();}
  if('needs'in d){showNeeds=!showNeeds;hud();return settings();}
@@ -174,6 +185,7 @@ document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b||
  if('tasks'in d)return tasks();
  if(d.claim){const r=act(game,{type:'claimTask',id:+d.claim},Date.now());if(r.error)return toast(r.error,'err');game=r.game;save();toast(r.message,'gold');hud();return tasks();}
  if(d.skip){const r=act(game,{type:'skipTask',id:+d.skip},Date.now());game=r.game;save();return tasks();}
+ if('trade'in d)return tradePanel();
  if('traffic'in d){showTraffic=!showTraffic;return finance();}
  if(d.buyland){const[sx,sy]=d.buyland.split(',').map(Number);const r=act(game,{type:'buyLand',sx,sy},Date.now());if(r.error)return toast(r.error,'err');game=r.game;save();toast(r.message,'gold');hud();toolbar();sel=null;return panel();}
  if('rename'in d){const r=act(game,{type:'renameCity',name:$('#cityname').value},Date.now());if(r.error)return toast(r.error,'err');game=r.game;save();toast(r.message);hud();return settings();}

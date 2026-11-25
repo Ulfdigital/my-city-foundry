@@ -71,3 +71,5 @@ button.money{background:none;color:var(--ink);padding:2px 4px;min-height:0;text-
 body:has(.sub:not(.hidden)) .panel{right:122px}
 #toasts{top:calc(78px + env(safe-area-inset-top))}
 @media (max-width:420px){.sub{width:86px}.sub button{font-size:10.5px}body:has(.sub:not(.hidden)) .panel{right:100px}.top .chip .lv{min-width:90px}}
+.nbs{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin:6px 0}.nb{background:#f3f7fb;border-radius:12px;padding:8px;display:flex;flex-direction:column;align-items:flex-start;font-size:20px}
+.nb b{font-size:15px}.nb small{font-size:13px;color:var(--muted)}.wideb.tradeb{background:#fff4d6;color:#6b4a10;margin-bottom:6px}
