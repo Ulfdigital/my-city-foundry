@@ -1,6 +1,6 @@
 // My City Foundry – Oberfläche: Karte zum Verschieben/Zoomen, Werkzeugleiste, Infofenster. Speichert automatisch auf dem Gerät.
 import {SAVE_KEY,TOOLS,GROUPS,tool,LEVELS,MAX_LEVEL,NEEDS,TREE_CLEAR,citySize,MAP_W,MAP_H,BIZ,bizMax,BUILD,levelPop,MAX_CITY_LEVEL,TAX_MIN,TAX_MAX,TAX_DEFAULT,happyText,happyIcon,HAPPY_MIN,SECTOR,ROAD_LANES,LAND_LEVEL,FEATURES,GOODS,NEIGHBORS,TRADE_PRICE,LOCAL_PRICE,WANTED_BONUS} from './data.mjs';
-import {newGame,act,update,restore,tile,population,incomePerMin,missing,has,hasRoad,counts,cityLevel,nextLevelPop,unlocked,demand,jobs,maxLevel,upgradeCost,attractiveness,tourism,built,canPlace,happiness,mood,finances,taxRate,covered,owns,canBuy,sectorPrice,jam,taskProgress,taskDone,features,trade,wanted,nextWantedChange} from './engine.mjs';
+import {newGame,act,update,restore,tile,population,incomePerMin,missing,has,hasRoad,counts,cityLevel,nextLevelPop,unlocked,demand,jobs,maxLevel,upgradeCost,attractiveness,tourism,built,canPlace,happiness,mood,finances,taxRate,covered,owns,canBuy,sectorPrice,jam,taskProgress,taskDone,features,trade,wanted,nextWantedChange,ACHIEVEMENTS} from './engine.mjs';
 import {draw,screenToCell,centerOn,cellTop,TW,TH,dayNight,season,weather,SEASONS,WEATHER} from './render.mjs';
 import {sfx,unlock,settings as audio,saveSettings,startMusic,stopMusic,setMusicMood} from './sound.mjs';
 
@@ -39,12 +39,46 @@ window.addEventListener('resize',resize);window.addEventListener('orientationcha
 function hud(){const p=population(game),inc=incomePerMin(game),L=cityLevel(game),nx=nextLevelPop(game),from=levelPop(L),share=nx?Math.max(0,Math.min(1,(p-from)/(nx-from))):1,d=demand(game),h=happiness(game),done=(game.tasks||[]).filter(t=>taskDone(game,t)).length;
  const dm=(icon,v,on)=>on?`<span class="dm" title="Nachfrage"><i>${icon}</i><u><b style="width:${Math.max(0,Math.min(100,v*2))}%"></b></u></span>`:'';
  // Oben nur noch kleine Schilder in den Ecken – die Karte bekommt den ganzen Bildschirm
- $('#top').innerHTML=`<button class="chip money" data-finance><b>🪙 ${fmt(game.money)}</b><small class="${inc<0?'neg':''}">${inc>=0?'+':''}${fmt(inc)} / Min.</small>
+ $('#top').innerHTML=`<button class="chip money" data-finance><b>${game.crest?crestSvg(game.crest,22):''}🪙 ${fmt(game.money)}</b><small class="${inc<0?'neg':''}">${inc>=0?'+':''}${fmt(inc)} / Min.</small>
    <span class="lv">Lv ${L} · 👥 ${fmt(p)}<span class="lvbar"><i style="width:${share*100}%"></i></span></span><span class="dems">${dm('🏡',d.house,true)}${dm('🛒',d.shop,unlocked(game,'zonec'))}${dm('🏭',d.factory,unlocked(game,'zonei'))}</span></button>
   <span class="corner"><button class="chip round sky" data-sky title="Wetter">${envIcon()}</button><button class="chip round happy" data-finance title="Zufriedenheit">${happyIcon(h)}<small>${h}%</small></button><button class="chip round tasksb" data-tasks title="Aufträge">📋${done?`<em>${done}</em>`:''}</button><button class="chip round" data-settings aria-label="Einstellungen">⚙️</button></span>`;}
 // Jede Stadt beginnt am Morgen; während der Einführung scheint immer die Sonne
 const clock=now=>dayNight(now-(game?.createdAt||0)+0.03*20*60*1000);
 const sky=now=>game?.tut&&!game.tut.done?'sun':weather(now);
+// ---------- Stadtwappen ----------
+const CREST_COLORS=['#c0392b','#2f6fb0','#27ae60','#f1c40f','#ffffff','#2d3436','#8e44ad','#e67e22'];
+const CREST_SYMS=['🏰','🦁','🦅','🐻','🐎','🌳','⚓','⭐','🗝️','⚔️','🌾','🍀','🐟','🔥','🌙','👑'];
+const CREST_SHAPES=['M4 4h56v26c0 16-12 26-28 30C16 56 4 46 4 30z','M4 4h56v30c0 14-14 22-28 26C18 56 4 48 4 34z','M32 2 60 12v18c0 16-12 26-28 32C16 56 4 46 4 30V12z'];
+function crestSvg(c,size=28){c=c||{shape:0,c1:'#2f6fb0',c2:'#f1c40f',sym:'🏰',split:1};const id='cr'+Math.random().toString(36).slice(2,7),d=CREST_SHAPES[c.shape||0];
+ const split=c.split===1?`<rect x="32" y="0" width="32" height="64" fill="${c.c2}"/>`:c.split===2?`<rect x="0" y="32" width="64" height="32" fill="${c.c2}"/>`:'';
+ return`<svg class="crest" viewBox="0 0 64 64" width="${size}" height="${size}"><defs><clipPath id="${id}"><path d="${d}"/></clipPath></defs><g clip-path="url(#${id})"><rect width="64" height="64" fill="${c.c1}"/>${split}</g><path d="${d}" fill="none" stroke="#2d2a22" stroke-width="3"/><text x="32" y="40" text-anchor="middle" font-size="24">${c.sym}</text></svg>`;}
+let crestDraft=null;
+function crestPanel(){const p=$('#panel');delete p.dataset.modal;sel=null;const c=crestDraft||(crestDraft={...(game.crest||{shape:0,c1:'#2f6fb0',c2:'#f1c40f',sym:'🏰',split:1})});
+ const sw=(k)=>CREST_COLORS.map(col=>`<button class="sw ${c[k]===col?'on':''}" style="background:${col}" data-crcol="${k}:${col}"></button>`).join('');
+ p.innerHTML=`<button class="close" data-close aria-label="Schließen">✕</button><h3>🛡️ Wappen von ${esc(game.city.name)}</h3><div class="crestprev">${crestSvg(c,110)}</div>
+  <p class="lab">Form</p><div class="opts">${CREST_SHAPES.map((_,i)=>`<button class="${c.shape===i?'on':''}" data-crshape="${i}">${crestSvg({...c,shape:i},34)}</button>`).join('')}</div>
+  <p class="lab">Teilung</p><div class="opts">${['einfarbig','senkrecht','waagerecht'].map((t,i)=>`<button class="${c.split===i?'on':''}" data-crsplit="${i}">${t}</button>`).join('')}</div>
+  <p class="lab">Farbe 1</p><div class="opts">${sw('c1')}</div><p class="lab">Farbe 2</p><div class="opts">${sw('c2')}</div>
+  <p class="lab">Zeichen</p><div class="opts syms">${CREST_SYMS.map(y=>`<button class="${c.sym===y?'on':''}" data-crsym="${y}">${y}</button>`).join('')}</div>
+  <button class="big" data-crsave>Wappen speichern</button>`;p.classList.remove('hidden');}
+
+// ---------- Spielstand sichern und übertragen ----------
+const b64=buf=>{const a=new Uint8Array(buf);let s='';for(let i=0;i<a.length;i+=0x8000)s+=String.fromCharCode.apply(null,a.subarray(i,i+0x8000));return btoa(s);};
+const unb64=str=>Uint8Array.from(atob(str),c=>c.charCodeAt(0));
+async function exportCode(){const json=JSON.stringify(game);if('CompressionStream'in window){const st=new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'));return'MCF1:'+b64(await new Response(st).arrayBuffer());}
+ return'MCF0:'+btoa(unescape(encodeURIComponent(json)));}
+async function importCode(code){code=String(code||'').trim().replace(/\s+/g,'');let json;
+ if(code.startsWith('MCF1:')){const st=new Blob([unb64(code.slice(5))]).stream().pipeThrough(new DecompressionStream('gzip'));json=await new Response(st).text();}
+ else if(code.startsWith('MCF0:'))json=decodeURIComponent(escape(atob(code.slice(5))));else throw new Error('Das ist kein gültiger Spielstand-Code.');
+ const g=restore(json);if(!g)throw new Error('Der Spielstand konnte nicht gelesen werden.');return g;}
+let lastCode='';
+function savePanel(){const p=$('#panel');delete p.dataset.modal;sel=null;
+ p.innerHTML=`<button class="close" data-close aria-label="Schließen">✕</button><h3>💾 Spielstand sichern</h3>
+  <p>Deine Stadt ist auf diesem Gerät gespeichert. Für ein neues iPhone oder als Sicherheit kannst du sie als <b>Code</b> sichern – zum Beispiel in den Notizen, per Nachricht oder per AirDrop.</p>
+  <button class="big" data-exp>📋 Code kopieren</button>${navigator.share?'<button class="wideb" data-share>📤 Code teilen (Notizen, AirDrop …)</button>':''}
+  <h3 style="margin-top:14px">📥 Spielstand laden</h3><p class="muted small">Code hier einfügen. Achtung: Die Stadt auf diesem Gerät wird dabei ersetzt.</p>
+  <textarea id="impcode" rows="3" placeholder="MCF1:…"></textarea><button class="wideb" data-imp>Spielstand laden</button>`;p.classList.remove('hidden');}
+
 function envIcon(){const now=Date.now(),dn=clock(now),w=sky(now);return`${audio.daynight&&dn.night>0.5?'🌙':WEATHER[w].icon}<small>${SEASONS[season(now)].icon}</small>`;}
 function toolbar(){setTimeout(()=>{const S=TUT[game?.tut?.step];if(game?.tut&&!game.tut.done&&S?.group)document.querySelector(`[data-group="${S.group}"]`)?.classList.add('pulse');},0);const lv=cityLevel(game);
  $('#tools').innerHTML=GROUPS.map(G=>{const ts=TOOLS.filter(t=>t.group===G.id),open=ts.some(t=>unlocked(game,t.id)),fresh=ts.filter(t=>unlocked(game,t.id)&&!built(game,t.id)&&t.lvl>1&&t.lvl>=lv-1).length;
@@ -55,7 +89,7 @@ function toolbar(){setTimeout(()=>{const S=TUT[game?.tut?.step];if(game?.tut&&!g
 
 function loop(t){if(!game||!canvas)return;{const s=size();if(s.w!==W||s.h!==Hh||s.d!==dpr)resize();}const now=Date.now(),dn=audio.daynight?clock(now):{night:0,dusk:false};draw(ctx,game,cam,{env:{night:dn.night,dusk:dn.dusk,season:season(now),weather:sky(now)},w:W,h:Hh,dpr,sel,preview,t,showNeeds,money:game.money,dirt:showDirt||['zone','zonei','power','airport'].includes(cur),traffic:showTraffic||cur==='lanes',land:cur==='land'});requestAnimationFrame(loop);}
 setInterval(()=>{if(!game||!canvas)return;const before=population(game),bj=jobs(game);game=update(game,Date.now());const p=population(game);
- if(p>before)toast('Neue Einwohner sind eingezogen! 🏡');else if(jobs(game)>bj)toast('Neue Arbeitsplätze in der Stadt! 💼');hud();levelUps();eventsModal();tutCheck();setMusicMood(audio.daynight&&clock(Date.now()).night>0.5);if(sel&&!$('#panel').dataset.modal)panel();},1000);
+ if(p>before)toast('Neue Einwohner sind eingezogen! 🏡');else if(jobs(game)>bj)toast('Neue Arbeitsplätze in der Stadt! 💼');hud();levelUps();eventsModal();achvToasts();tutCheck();setMusicMood(audio.daynight&&clock(Date.now()).night>0.5);if(sel&&!$('#panel').dataset.modal)panel();},1000);
 setInterval(()=>{if(game)save();},5000);
 document.addEventListener('visibilitychange',()=>{if(game)save();});
 
@@ -134,6 +168,14 @@ function bindPointer(){const pts=new Map();let start=null,moved=false,painting=f
  canvas.addEventListener('pointerleave',()=>{preview=null;});
  canvas.addEventListener('wheel',e=>{e.preventDefault();const z=Math.max(0.18,Math.min(2.6,cam.z*(e.deltaY<0?1.12:1/1.12)));cam.x=e.clientX-(e.clientX-cam.x)*z/cam.z;cam.y=e.clientY-(e.clientY-cam.y)*z/cam.z;cam.z=z;},{passive:false});}
 
+// ---------- Erfolge ----------
+function achvToasts(){const ids=game.newAchv||[];if(!ids.length)return;for(const id of ids){const a=ACHIEVEMENTS.find(x=>x.id===id);if(a)toast(`🏅 Erfolg: ${a.icon} ${a.name}${a.reward?` · +${fmt(a.reward)} Taler`:''}`,'gold');}
+ sfx('level');const r=act(game,{type:'seenAchv'},Date.now());game=r.game;save();}
+let taskTab='tasks';
+function achvView(){const got=Object.keys(game.achv||{}).length;
+ return`<p class="muted small">${got} von ${ACHIEVEMENTS.length} Erfolgen geschafft</p><div class="medals">${ACHIEVEMENTS.map(a=>{const ok=!!game.achv?.[a.id];
+  return`<div class="medal ${ok?'ok':''}"><span>${ok?a.icon:'🔒'}</span><b>${a.name}</b><small>${a.text}${a.reward?`<br>${ok?'✓ ':''}${fmt(a.reward)} Taler`:''}</small></div>`;}).join('')}</div>`;}
+
 // ---------- Einführung für neue Spieler ----------
 const TUT=[
  {text:'👋 Willkommen, Bürgermeisterin oder Bürgermeister! Ich zeige dir in ein paar Schritten, wie du deine Stadt baust.',btn:'Los geht’s'},
@@ -153,7 +195,9 @@ function tutCheck(){const T=game?.tut;if(!T||T.done)return;const S=TUT[T.step];i
 
 // ---------- Aufträge und Ereignisse ----------
 function tasks(){const p=$('#panel');delete p.dataset.modal;sel=null;
- p.innerHTML=`<button class="close" data-close aria-label="Schließen">✕</button><h3>📋 Aufträge vom Bürgermeister-Büro</h3>
+ const tabs=`<div class="tabs"><button class="${taskTab==='tasks'?'on':''}" data-ttab="tasks">📋 Aufträge</button><button class="${taskTab==='achv'?'on':''}" data-ttab="achv">🏅 Erfolge ${Object.keys(game.achv||{}).length}/${ACHIEVEMENTS.length}</button></div>`;
+ if(taskTab==='achv'){p.innerHTML=`<button class="close" data-close aria-label="Schließen">✕</button>${tabs}${achvView()}`;p.classList.remove('hidden');return;}
+ p.innerHTML=`<button class="close" data-close aria-label="Schließen">✕</button>${tabs}<h3>📋 Aufträge vom Bürgermeister-Büro</h3>
   <div class="tasks">${(game.tasks||[]).map(t=>{const pr=taskProgress(game,t),done=pr.have>=pr.need;return`<div class="task ${done?'done':''}"><span class="ti">${t.icon}</span><div class="tt"><b>${esc(t.text)}</b>
    <span class="lvbar wide"><i style="width:${Math.min(100,pr.have/pr.need*100)}%"></i></span><small>${fmt(Math.max(0,pr.have))} / ${fmt(pr.need)} · Belohnung ${fmt(t.reward)} Taler</small></div>
    ${done?`<button data-claim="${t.id}">Abholen</button>`:`<button class="link" data-skip="${t.id}" title="Anderen Auftrag">↻</button>`}</div>`;}).join('')}</div>
@@ -194,6 +238,7 @@ function settings(){const p=$('#panel');delete p.dataset.modal;const n=counts(ga
   <p>⭐ Attraktivität ${fmt(attractiveness(game))} · 🧳 Tourismus +${fmt(tourism(game))} Taler/Min. · 💼 ${fmt(jobs(game))} Arbeitsplätze</p><p class="muted">🏠 ${Object.entries(n).filter(([k])=>k.startsWith('house')).reduce((a,[,v])=>a+v,0)} Häuser · 🛣️ ${n.road||0} Straßenfelder · 🌳 ${n.park||0} Parks</p>
   <p class="links"><a href="datenschutz.html">Datenschutz</a> · <a href="https://mentaro-online.app/impressum" target="_blank" rel="noopener">Impressum</a></p>
   <div class="toggles"><button class="${audio.sound?'on':''}" data-aud="sound">🔊 Töne</button><button class="${audio.music?'on':''}" data-aud="music">🎵 Musik</button><button class="${audio.daynight?'on':''}" data-aud="daynight">🌙 Tag und Nacht</button></div>
+  <div class="setbtns"><button class="wideb" data-crest>🛡️ Wappen gestalten</button><button class="wideb" data-savep>💾 Spielstand sichern</button></div>
   <button class="wideb" data-tutagain>🎓 Einführung noch einmal zeigen</button>
   <button class="danger" data-reset>Neue Stadt gründen</button><p class="muted small">Version ${BUILD}</p>`;p.classList.remove('hidden');}
 
@@ -208,6 +253,17 @@ document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b||
  if('settings'in d){sfx('click');return settings();}
  if(d.aud){audio[d.aud]=!audio[d.aud];saveSettings();if(d.aud==='music'){audio.music?startMusic():stopMusic();}hud();return settings();}
  if('sky'in d){const now=Date.now(),dn=clock(now);return toast(`${SEASONS[season(now)].icon} ${SEASONS[season(now)].name} · ${WEATHER[sky(now)].icon} ${WEATHER[sky(now)].name} · ${audio.daynight?(dn.night>0.5?'🌙 ':'☀️ ')+dn.label:'immer Tag'}`);}
+ if(d.ttab){taskTab=d.ttab;return tasks();}
+ if('crest'in d){crestDraft=null;return crestPanel();}
+ if(d.crshape){crestDraft.shape=+d.crshape;return crestPanel();}if(d.crsplit){crestDraft.split=+d.crsplit;return crestPanel();}
+ if(d.crcol){const[k,c]=d.crcol.split(':');crestDraft[k]=c;return crestPanel();}if(d.crsym){crestDraft.sym=d.crsym;return crestPanel();}
+ if('crsave'in d){const r=act(game,{type:'setCrest',crest:crestDraft},Date.now());game=r.game;save();sfx('coin');toast(r.message,'gold');hud();return settings();}
+ if('savep'in d)return savePanel();
+ if('exp'in d){exportCode().then(c=>{lastCode=c;return navigator.clipboard.writeText(c);}).then(()=>toast(`✅ Code kopiert (${fmt(lastCode.length)} Zeichen). Füge ihn z. B. in den Notizen ein.`,'gold')).catch(()=>toast('Kopieren ging nicht – nutze „Code teilen“.','err'));return;}
+ if('share'in d){exportCode().then(c=>navigator.share({title:`Spielstand ${game.city.name}`,text:c})).catch(()=>{});return;}
+ if('imp'in d){const code=$('#impcode').value;if(!code.trim())return toast('Bitte zuerst einen Code einfügen.','err');
+  if(!confirm('Die Stadt auf diesem Gerät wird durch den Spielstand aus dem Code ersetzt. Fortfahren?'))return;
+  importCode(code).then(g=>{game=g;save();sel=null;$('#panel').classList.add('hidden');centerOn(cam,game.start.x,game.start.y+1,W,Hh);hud();toolbar();toast(`📥 ${game.city.name} wurde geladen!`,'gold');}).catch(e=>toast(e.message,'err'));return;}
  if('tutagain'in d){game.tut={step:0,base:{...game.stats}};save();$('#panel').classList.add('hidden');return tutShow();}
  if('tutnext'in d){tutAdvance();return;}
  if('tutskip'in d){game.tut={done:true};save();return tutShow();}
