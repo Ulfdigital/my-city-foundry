@@ -510,7 +510,7 @@ export function draw(ctx,g,cam,{w,h,dpr,sel,preview,t,showNeeds,money,dirt,traff
  const k=Math.min(4,1/cam.z);const tag=(p,txt,font,dy,fg,bgc)=>{ctx.font=`${font}px sans-serif`;ctx.textAlign='center';const wd=(ctx.measureText(txt).width/1)+14*k;ctx.fillStyle=bgc;ctx.beginPath();ctx.roundRect(p.x-wd/2,p.y+dy-font*0.95,wd,font*1.35,8*k);ctx.fill();ctx.fillStyle=fg;ctx.fillText(txt,p.x,p.y+dy);};
  if(land){for(let sy=0;sy<SECTORS;sy++)for(let sx=0;sx<SECTORS;sx++){const p=cellTop(sx*SECTOR+SECTOR/2,sy*SECTOR+SECTOR/2),f=features(g,sx,sy),buy=canBuy(g,sx,sy);
    if(f.length)tag(p,f.map(q=>FEATURES[q].icon).join(' '),20*k,-16*k,'#000','rgba(255,255,255,.85)');
-   if(buy)tag(p,'🗺️ '+sectorPrice(g).toLocaleString('de-DE'),13*k,14*k,'#245a91','rgba(255,255,255,.95)');}}
+   if(buy)tag(p,'🗺️ '+sectorPrice(g,sx,sy).toLocaleString('de-DE'),13*k,14*k,'#245a91','rgba(255,255,255,.95)');}}
  // Nachbarstädte am Rand der Welt
  const W2=wanted(Date.now());for(const[i,nb]of NEIGHBORS.entries()){const pos=[[MAP_W/2,-4],[MAP_W+4,MAP_H/2],[MAP_W/2,MAP_H+4],[-4,MAP_H/2]][i],p=cellTop(pos[0],pos[1]);
   for(const[a,b,hh,col]of[[-30,6,40,'#cfd9e2'],[0,0,70,'#b9cad8'],[28,8,50,'#e3d6c4'],[-12,18,26,'#f2d0c4'],[16,22,30,'#d9ecd5']])box(ctx,p.x+a,p.y+b,12,6,hh,col);

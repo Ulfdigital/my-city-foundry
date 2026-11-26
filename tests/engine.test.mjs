@@ -58,11 +58,12 @@ test('Alte Städte (40×40 und 64×64) ziehen in die Mitte der Welt – nichts g
   const r=restore(JSON.stringify(old));assert.equal(r.tiles.length,MAP_W*MAP_H);const off=(MAP_W-n)/2;assert.deepEqual(r.start,{x:17+off,y:17+off});
   assert.equal(tile(r,17+off,18+off).lvl,4);assert.equal(tile(r,17+off,17+off).lanes,1);assert.equal(tile(r,21+off,20+off).rx,20+off);assert.ok(owns(r,17+off,17+off));}});
 
-test('Land kaufen: nur angrenzende Gebiete, ab Level 12, Preis steigt; Bauen nur auf eigenem Land',()=>{
+test('Land kaufen: ab Level 12, Preis steigt, ferne Gebiete teurer; Bauen nur auf eigenem Land',()=>{
  let g=newGame(T0);g.money=1e7;let out=null;for(let y=0;y<MAP_H&&!out;y++)for(let x=0;x<MAP_W;x++)if(!owns(g,x,y)&&tile(g,x,y).t==='grass'){out={x,y};break;}
  assert.match(bad(g,{type:'build',tool:'road',...out}),/gehört dir noch nicht/);assert.match(bad(g,{type:'buyLand',sx:1,sy:3}),new RegExp('Level '+LAND_LEVEL));
- g.level=LAND_LEVEL;assert.ok(canBuy(g,1,3));assert.ok(!canBuy(g,0,3));const p1=sectorPrice(g);g=ok(g,{type:'buyLand',sx:1,sy:3});assert.ok(owns(g,SECTOR+2,3*SECTOR+2));
- assert.ok(sectorPrice(g)>p1);assert.ok(canBuy(g,0,3));assert.match(bad(g,{type:'buyLand',sx:7,sy:7}),/direkt neben/);});
+ g.level=LAND_LEVEL;assert.ok(canBuy(g,1,3));assert.ok(canBuy(g,0,3));assert.ok(!canBuy(g,3,3));assert.ok(sectorPrice(g,0,3)>sectorPrice(g,1,3));const p1=sectorPrice(g,1,3);g=ok(g,{type:'buyLand',sx:1,sy:3});assert.ok(owns(g,SECTOR+2,3*SECTOR+2));
+ assert.ok(sectorPrice(g,0,3)>p1);const far=sectorPrice(g,7,7),m=g.money;g=ok(g,{type:'buyLand',sx:7,sy:7});assert.ok(far>p1&&m-g.money<=far);assert.ok(owns(g,7*SECTOR+2,7*SECTOR+2));
+ assert.match(bad(g,{type:'buyLand',sx:7,sy:7}),/schon/);});
 
 test('Bergbau: Minen nur auf Fels, bringen Geld; Straße auf Fels kostet mehr',()=>{
  let g=newGame(T0);g.money=1e7;g.level=60;g.land=g.land.map(()=>1);g.rev++;const rock=g.tiles.findIndex(c=>c.t==='rock');assert.ok(rock>=0,'Berge vorhanden');
