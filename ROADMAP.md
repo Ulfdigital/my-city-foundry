@@ -15,4 +15,5 @@
 | 0.9 | Spielstand sichern und übertragen (Code kopieren/teilen/laden), 34 Erfolge mit Medaillen und Belohnungen, Stadtwappen-Editor, Fußgänger, Boote, Flugzeuge, fahrende Züge am Bahnhof | **fertig** |
 | 0.9.1 | Willkommen zurück (Einnahmen, neue Einwohner, Level, Aufträge), Rückgängig-Knopf (bis 15 Schritte, ein Straßenzug = ein Schritt), Übersichtskarte zum Springen | **fertig** |
 | 0.12.1 | Land kaufen überall: auch Gebiete, die nicht an dein Land grenzen (z. B. mit Öl), lassen sich kaufen – sie kosten 50 % mehr | **fertig** |
+| 0.12.2 | Land kaufen: Werkzeugliste klappt ein, damit die ganze Karte frei ist (vorher verdeckte sie Gebiete am rechten Rand) | **fertig** |
 | 1.0 | App Store: Texte, Bildschirmfotos, Video, Datenschutz-Angaben, Einreichung | geplant |
