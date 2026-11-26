@@ -30,7 +30,17 @@ function makeMap(g){const t=Array.from({length:MAP_W*MAP_H},()=>({t:'grass'}));n
 function migrate(g,n){const off=Math.floor((MAP_W-n)/2),old=g.tiles,t=Array.from({length:MAP_W*MAP_H},()=>({t:'grass'}));
  nature(g,t,MAP_W,MAP_H,(x,y)=>x>=off&&y>=off&&x<off+n&&y<off+n);
  for(let y=0;y<n;y++)for(let x=0;x<n;x++){const c=old[y*n+x];if(c.rx!==undefined){c.rx+=off;c.ry+=off;}t[idx(x+off,y+off)]=c;}
- g.tiles=t;g.start={x:g.start.x+off,y:g.start.y+off};touch(g);}
+ g.tiles=t;g.start={x:g.start.x+off,y:g.start.y+off};
+ // Gebiete (Land und Schätze) mitnehmen: gekauftes Land bleibt deins, der neue Ring außen ist frei zu kaufen und hat eigene Schätze
+ const os=n/SECTOR,so=off/SECTOR;if(Number.isInteger(os)&&Number.isInteger(so)&&Array.isArray(g.land)&&g.land.length===os*os){
+  const land=Array(SECTORS*SECTORS).fill(0),fresh=makeSecrets(g),sec=[...fresh],ring=[];
+  for(let sy=0;sy<SECTORS;sy++)for(let sx=0;sx<SECTORS;sx++){const ox=sx-so,oy=sy-so,i=sy*SECTORS+sx;
+   if(ox>=0&&oy>=0&&ox<os&&oy<os){land[i]=g.land[oy*os+ox]?1:0;sec[i]=Array.isArray(g.secrets)?g.secrets[oy*os+ox]??null:fresh[i];}else ring.push(i);}
+  // Im neuen Ring gibt es auf jeden Fall Öl – mindestens auf jeder Seite ein Gebiet
+  for(const side of[i=>Math.floor(i/SECTORS)<so,i=>i%SECTORS>=so+os,i=>Math.floor(i/SECTORS)>=so+os,i=>i%SECTORS<so]){const opts=ring.filter(side);
+   if(!opts.some(i=>sec[i]==='oil')){const near=opts.filter(i=>{const x=i%SECTORS,y=Math.floor(i/SECTORS);return x>=so-1&&x<=so+os&&y>=so-1&&y<=so+os;});const pick=near.length?near:opts;sec[pick[Math.floor(rand(g)*pick.length)]]='oil';}}
+  g.land=land;g.secrets=sec;}
+ touch(g);}
 
 // ---------- Land ----------
 const startLand=()=>Array.from({length:SECTORS*SECTORS},(_,i)=>{const sx=i%SECTORS,sy=Math.floor(i/SECTORS);return sx>=START_SECTORS[0]&&sx<=START_SECTORS[1]&&sy>=START_SECTORS[0]&&sy<=START_SECTORS[1]?1:0;});

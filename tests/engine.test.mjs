@@ -53,7 +53,7 @@ test('Dienste versorgen den Umkreis; Attraktivität lockt Leute und Touristen',(
  const d0=demand(g).house;g=ok(g,{type:'build',tool:'cityhall',x:s.x-4,y:s.y+2});assert.ok(demand(g).house>d0);assert.match(bad(g,{type:'build',tool:'cityhall',x:s.x-4,y:s.y+5}),/nur einmal/);});
 
 test('Alte Städte (40×40 und 64×64) ziehen in die Mitte der Welt – nichts geht verloren',()=>{
- for(const n of OLD_MAPS){const g=newGame(T0);const old={...g,tiles:Array.from({length:n*n},()=>({t:'grass'})),start:{x:17,y:17}};delete old.land;
+ for(const n of OLD_MAPS.filter(n=>n<=64)){const g=newGame(T0);const old={...g,tiles:Array.from({length:n*n},()=>({t:'grass'})),start:{x:17,y:17}};delete old.land;
   old.tiles[17*n+17]={t:'road'};old.tiles[18*n+17]={t:'house',lvl:4};old.tiles[20*n+20]={t:'hospital',rx:20,ry:20,root:true};old.tiles[20*n+21]={t:'hospital',rx:20,ry:20,part:true};
   const r=restore(JSON.stringify(old));assert.equal(r.tiles.length,MAP_W*MAP_H);const off=(MAP_W-n)/2;assert.deepEqual(r.start,{x:17+off,y:17+off});
   assert.equal(tile(r,17+off,18+off).lvl,4);assert.equal(tile(r,17+off,17+off).lanes,1);assert.equal(tile(r,21+off,20+off).rx,20+off);assert.ok(owns(r,17+off,17+off));}});
@@ -61,9 +61,21 @@ test('Alte Städte (40×40 und 64×64) ziehen in die Mitte der Welt – nichts g
 test('Land kaufen: ab Level 12, Preis steigt, ferne Gebiete teurer; Bauen nur auf eigenem Land',()=>{
  let g=newGame(T0);g.money=1e7;let out=null;for(let y=0;y<MAP_H&&!out;y++)for(let x=0;x<MAP_W;x++)if(!owns(g,x,y)&&tile(g,x,y).t==='grass'){out={x,y};break;}
  assert.match(bad(g,{type:'build',tool:'road',...out}),/gehört dir noch nicht/);assert.match(bad(g,{type:'buyLand',sx:1,sy:3}),new RegExp('Level '+LAND_LEVEL));
- g.level=LAND_LEVEL;assert.ok(canBuy(g,1,3));assert.ok(canBuy(g,0,3));assert.ok(!canBuy(g,3,3));assert.ok(sectorPrice(g,0,3)>sectorPrice(g,1,3));const p1=sectorPrice(g,1,3);g=ok(g,{type:'buyLand',sx:1,sy:3});assert.ok(owns(g,SECTOR+2,3*SECTOR+2));
- assert.ok(sectorPrice(g,0,3)>p1);const far=sectorPrice(g,7,7),m=g.money;g=ok(g,{type:'buyLand',sx:7,sy:7});assert.ok(far>p1&&m-g.money<=far);assert.ok(owns(g,7*SECTOR+2,7*SECTOR+2));
- assert.match(bad(g,{type:'buyLand',sx:7,sy:7}),/schon/);});
+ g.level=LAND_LEVEL;assert.ok(canBuy(g,3,5));assert.ok(canBuy(g,2,5));assert.ok(!canBuy(g,5,5));assert.ok(sectorPrice(g,2,5)>sectorPrice(g,3,5));const p1=sectorPrice(g,3,5);g=ok(g,{type:'buyLand',sx:3,sy:5});assert.ok(owns(g,3*SECTOR+2,5*SECTOR+2));
+ assert.ok(sectorPrice(g,2,5)>p1);const far=sectorPrice(g,11,11),m=g.money;g=ok(g,{type:'buyLand',sx:11,sy:11});assert.ok(far>p1&&m-g.money<=far);assert.ok(owns(g,11*SECTOR+2,11*SECTOR+2));
+ assert.match(bad(g,{type:'buyLand',sx:11,sy:11}),/schon/);});
+
+test('Welt 0.12 (128×128) wird größer: Stadt rückt in die Mitte, gekauftes Land und Schätze bleiben, neuer Ring mit Öl',()=>{
+ const oN=128,oS=oN/SECTOR,off=(MAP_W-oN)/2,so=off/SECTOR;const g0=newGame(T0,{},7);
+ const old={...g0,tiles:Array.from({length:oN*oN},()=>({t:'grass'})),start:{x:60,y:61},land:Array(oS*oS).fill(0),secrets:Array(oS*oS).fill(null)};
+ old.tiles[61*oN+60]={t:'house',lvl:3,since:0};old.tiles[10*oN+10]={t:'oil'};old.land[0]=1;old.land[3*oS+3]=1;old.secrets[0]='oil';old.secrets[5]='goldvein';
+ const r=restore(JSON.stringify(old));assert.equal(r.tiles.length,MAP_W*MAP_H);assert.deepEqual(r.start,{x:60+off,y:61+off});
+ assert.equal(tile(r,60+off,61+off).lvl,3);assert.equal(tile(r,10+off,10+off).t,'oil');
+ assert.ok(owns(r,off+2,off+2));assert.ok(owns(r,off+3*SECTOR+2,off+3*SECTOR+2));assert.ok(!owns(r,2,2));assert.equal(r.land.reduce((a,v)=>a+v,0),2);
+ assert.equal(r.secrets[so*SECTORS+so],'oil');assert.equal(r.secrets[so*SECTORS+so+5],'goldvein');
+ const ring=r.secrets.map((v,i)=>({v,x:i%SECTORS,y:Math.floor(i/SECTORS)})).filter(o=>o.x<so||o.y<so||o.x>=so+oS||o.y>=so+oS);
+ assert.equal(ring.length,SECTORS*SECTORS-oS*oS);for(const side of[o=>o.y<so,o=>o.x>=so+oS,o=>o.y>=so+oS,o=>o.x<so])assert.ok(ring.filter(side).some(o=>o.v==='oil'),'Öl auf jeder Seite');
+ r.level=LAND_LEVEL;r.money=1e7;assert.ok(canBuy(r,so-1,so));const rr=act(r,{type:'buyLand',sx:so-1,sy:so},T0);assert.ok(!rr.error);});
 
 test('Bergbau: Minen nur auf Fels, bringen Geld; Straße auf Fels kostet mehr',()=>{
  let g=newGame(T0);g.money=1e7;g.level=60;g.land=g.land.map(()=>1);g.rev++;const rock=g.tiles.findIndex(c=>c.t==='rock');assert.ok(rock>=0,'Berge vorhanden');

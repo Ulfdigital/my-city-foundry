@@ -16,4 +16,5 @@
 | 0.9.1 | Willkommen zurück (Einnahmen, neue Einwohner, Level, Aufträge), Rückgängig-Knopf (bis 15 Schritte, ein Straßenzug = ein Schritt), Übersichtskarte zum Springen | **fertig** |
 | 0.12.1 | Land kaufen überall: auch Gebiete, die nicht an dein Land grenzen (z. B. mit Öl), lassen sich kaufen – sie kosten 50 % mehr | **fertig** |
 | 0.12.2 | Land kaufen: Werkzeugliste klappt ein, damit die ganze Karte frei ist (vorher verdeckte sie Gebiete am rechten Rand) | **fertig** |
+| 0.13 | Größere Welt: 192×192 statt 128×128 (12×12 Gebiete). Alte Städte rücken in die Mitte, gekauftes Land und Schätze bleiben; im neuen Ring außen gibt es auf jeder Seite Öl | **fertig** |
 | 1.0 | App Store: Texte, Bildschirmfotos, Video, Datenschutz-Angaben, Einreichung | geplant |
