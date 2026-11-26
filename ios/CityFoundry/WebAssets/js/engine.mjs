@@ -1,5 +1,5 @@
 // My City Foundry – Spiellogik. Reine Funktionen: act(game, action, now) → {game, error, message}.
-import {VERSION,MAP_W,MAP_H,OLD_MAPS,SECTOR,SECTORS,START_SECTORS,LAND_LEVEL,landPrice,START_MONEY,OFFLINE_MAX_H,TOOLS,tool,ZONES,TREE_CLEAR,LEVELS,MAX_LEVEL,BIZ,bizMax,TAX_PER_PERSON,MOVE_IN_SEC,
+import {VERSION,MAP_W,MAP_H,OLD_MAPS,SECTOR,SECTORS,START_SECTORS,LAND_LEVEL,landPrice,FAR_LAND,START_MONEY,OFFLINE_MAX_H,TOOLS,tool,ZONES,TREE_CLEAR,LEVELS,MAX_LEVEL,BIZ,bizMax,TAX_PER_PERSON,MOVE_IN_SEC,
  MAX_CITY_LEVEL,levelPop,LEVEL_BONUS,WORKER_SHARE,FREE_WORKERS,SHOP_SHARE,FACTORY_SHARE,ATTR_MOVE,TAX_DEFAULT,TAX_MIN,TAX_MAX,FACTORY_DIRT,HAPPY_MIN,
  ROAD_LANES,ROCK_ROAD,BRIDGE,TRAFFIC_PER_PERSON,TRAFFIC_PER_JOB,TASKS_ACTIVE,EVENT_MIN,EVENTS,
  FEATURES,GOLDVEIN_BONUS,GOODS,FACTORY_GOODS,LOCAL_PRICE,TRADE_PRICE,WANTED_BONUS,WANTED_MIN,NEIGHBORS} from './data.mjs';
@@ -36,9 +36,10 @@ function migrate(g,n){const off=Math.floor((MAP_W-n)/2),old=g.tiles,t=Array.from
 const startLand=()=>Array.from({length:SECTORS*SECTORS},(_,i)=>{const sx=i%SECTORS,sy=Math.floor(i/SECTORS);return sx>=START_SECTORS[0]&&sx<=START_SECTORS[1]&&sy>=START_SECTORS[0]&&sy<=START_SECTORS[1]?1:0;});
 export function owns(g,x,y){return inside(x,y)&&g.land[Math.floor(y/SECTOR)*SECTORS+Math.floor(x/SECTOR)]===1;}
 export function boughtLand(g){return g.land.reduce((a,v)=>a+v,0)-(START_SECTORS[1]-START_SECTORS[0]+1)**2;}
-export function canBuy(g,sx,sy){if(sx<0||sy<0||sx>=SECTORS||sy>=SECTORS||g.land[sy*SECTORS+sx])return false;
- return N4.some(([dx,dy])=>{const x=sx+dx,y=sy+dy;return x>=0&&y>=0&&x<SECTORS&&y<SECTORS&&g.land[y*SECTORS+x]===1;});}
-export function sectorPrice(g){return landPrice(boughtLand(g));}
+// Jedes fremde Gebiet ist kaufbar – auch weit weg (z. B. für Öl). Gebiete, die nicht an dein Land grenzen, kosten etwas mehr.
+export function canBuy(g,sx,sy){return sx>=0&&sy>=0&&sx<SECTORS&&sy<SECTORS&&!g.land[sy*SECTORS+sx];}
+export function nextTo(g,sx,sy){return N4.some(([dx,dy])=>{const x=sx+dx,y=sy+dy;return x>=0&&y>=0&&x<SECTORS&&y<SECTORS&&g.land[y*SECTORS+x]===1;});}
+export function sectorPrice(g,sx,sy){const p=landPrice(boughtLand(g));return sx===undefined||nextTo(g,sx,sy)?p:Math.round(p*FAR_LAND/500)*500;}
 // Versteckte Schätze je Gebiet (Öl, Goldader) – werden einmal ausgewürfelt, sind aber vor dem Kauf sichtbar
 function makeSecrets(g){const st=startLand();return Array.from({length:SECTORS*SECTORS},(_,i)=>{const r=rand(g);if(st[i])return r<0.08?'oil':null;return r<0.14?'oil':r<0.24?'goldvein':null;});}
 export function sectorOf(x,y){return Math.floor(y/SECTOR)*SECTORS+Math.floor(x/SECTOR);}
@@ -254,7 +255,7 @@ const A={
   touch(g);stat(g,id);update(g,now);
   return T.size||T.attr>=10||T.prod?`${T.icon} ${T.name} ist fertig!`:null;},
  buyLand(g,{sx,sy}){if(!unlocked(g,'land'))throw new Error(`Land kaufen geht ab Stadt-Level ${LAND_LEVEL}.`);if(g.land[sy*SECTORS+sx])throw new Error('Dieses Gebiet gehört dir schon.');
-  if(!canBuy(g,sx,sy))throw new Error('Du kannst nur Gebiete direkt neben deinem Land kaufen.');const price=sectorPrice(g);pay(g,price,'Das Gebiet');g.land[sy*SECTORS+sx]=1;touch(g);stat(g,'land');
+  if(!canBuy(g,sx,sy))throw new Error('Dieses Gebiet gibt es nicht.');const price=sectorPrice(g,sx,sy);pay(g,price,'Das Gebiet');g.land[sy*SECTORS+sx]=1;touch(g);stat(g,'land');
   return`🗺️ Neues Land gekauft! Hier ist Platz für ein Dorf, Bergbau oder mehr Stadt.`;},
  upgrade(g,{x,y},now){const c=tile(g,x,y);if(!(c?.t==='house'||BIZ[c?.t]))throw new Error('Hier gibt es nichts auszubauen.');if(c.lvl>=maxLevel(c))throw new Error(c.t==='house'?'Höher geht es nicht – ein echter Megaturm!':'Das ist schon die größte Stufe.');
   const next=c.lvl+1,miss=missing(g,x,y,next),sp=spec(g,x,y,next);
