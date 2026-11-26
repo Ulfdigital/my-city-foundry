@@ -61,17 +61,37 @@ function tree(ctx,x,y,s=1){const h=((x*7.3+y*3.1)%1+1)%1;ctx.fillStyle='#6b4a2e'
  ctx.fillStyle=c1;ctx.beginPath();ctx.arc(x,y-12*s,7*s,0,7);ctx.fill();ctx.fillStyle=c2;ctx.beginPath();ctx.arc(x-2*s,y-14*s,4*s,0,7);ctx.fill();
  if(SEASON==='spring'&&h<0.5){ctx.fillStyle='#ffc0d8';for(const[a,b]of[[3,-14],[-4,-10],[1,-9]]){ctx.beginPath();ctx.arc(x+a*s,y+b*s,1.3*s,0,7);ctx.fill();}}}
 
+// ---------- Brücken und Tunnel ----------
+let GHOST=false,G=null;   // beim Straßenbau: Gebäude durchsichtig, Tunnel offen
+const isTunnel=c=>!!c&&(c.t==='road'||c.t==='rail')&&!!c.rock;
+const isWay=c=>!!c&&(c.t==='road'||c.t==='rail'||c.t==='train');
+// Brücke: Fahrbahn über dem Wasser, Seitenkante und Pfeiler vorne, Geländer wo es nicht weitergeht
+function bridgeDeck(ctx,c,x,y,cx,cy){const T=[cx,cy-TH/2],R=[cx+TW/2,cy],B=[cx,cy+TH/2],L=[cx-TW/2,cy];
+ const nb=(du,dv)=>{const[dx,dy]=wvec(du,dv);return tile(G,x+dx,y+dy);};
+ const deck=c.t==='road'?['','#8d9096','#7d8086','#6c6f75','#55585e'][c.lanes||1]:'#9a8f80';
+ const front=[[L,B,nb(0,1)],[B,R,nb(1,0)]];
+ for(const[a,b,n]of front)if(!n?.bridge){fillPoly(ctx,[a,b,[b[0],b[1]+4],[a[0],a[1]+4]],'#6b6257');}                       // Seitenkante
+ if(!nb(0,1)?.bridge||!nb(1,0)?.bridge){ctx.fillStyle='#7a7166';ctx.fillRect(cx-2.5,cy+TH/2+3,5,6);}                       // Pfeiler im Wasser
+ fillPoly(ctx,[T,R,B,L],deck);
+ for(const[a,b,n]of[[T,R,nb(0,-1)],[R,B,nb(1,0)],[B,L,nb(0,1)],[L,T,nb(-1,0)]]){if(isWay(n))continue;                       // Geländer
+  strokeLine(ctx,[[a[0],a[1]-4],[b[0],b[1]-4]],'#e8e4da',1.2);for(let s=0;s<=1.001;s+=0.25){const p=[a[0]+(b[0]-a[0])*s,a[1]+(b[1]-a[1])*s];strokeLine(ctx,[p,[p[0],p[1]-4]],'#cfc9bd',0.8);}}}
+// Tunnelportal an jeder Seite, an der die Straße oder Schiene aus dem Berg kommt
+function portals(ctx,g,x,y,c){for(const[dx,dy]of DIRS){const n=tile(g,x+dx,y+dy);if(!n||isTunnel(n))continue;
+  if(c.t==='road'?n.t!=='road':!linked(g,x,y,dx,dy))continue;
+  const E=[x+0.5+dx*0.5,y+0.5+dy*0.5],e=[-dy,dx],arch=(w,h)=>{const ps=[];for(let i=0;i<=12;i++){const a=Math.PI*i/12;ps.push(W([E[0]+e[0]*w*Math.cos(a),E[1]+e[1]*w*Math.cos(a)],h*Math.sin(a)+(i===0||i===12?0:h*0.25)));}return ps;};
+  fillPoly(ctx,arch(0.4,15),'#7b776e');fillPoly(ctx,arch(0.29,11),'#1d1c1a');}}
 function ground(ctx,c,x,y,cx,cy,t){
- const v=hash(x,y);let col;
+ const v=hash(x,y),tun=isTunnel(c)&&!GHOST;let col;
  // Bodenfarbe: jede Art genau einmal festlegen (Straße grau, Wasser blau, Fels grau, Zonen farbig, sonst Gras je Jahreszeit)
- if(c.t==='water')col='#4fa3d8';
+ if(c.t==='water'||c.bridge)col='#4fa3d8';            // Brücke: erst Wasser, darüber die Fahrbahn
+ else if(tun)col=v<0.5?'#9c9a94':'#a6a39c';            // Tunnel: man sieht den Berg
  else if(c.t==='road')col=['','#8d9096','#7d8086','#6c6f75','#55585e'][c.lanes||1];
  else if(c.t==='rock'||(tool(c.t)?.onRock)||(c.t==='rail'&&c.rock))col=v<0.5?'#9c9a94':'#a6a39c';
  else if(c.t==='zone')col='#a9d98f';else if(c.t==='zonec')col='#a9cbe8';else if(c.t==='zonei')col='#e6d98f';
  else if(c.t==='park')col='#6fbf5a';else if(['sport','zoo','themepark','wind','ferris','naturepark'].includes(c.t))col='#74bf5c';
  else if(c.t==='ski')col='#eef5fb';else if(c.t==='airport')col='#b9bcb6';else if(tool(c.t)?.size)col='#cfcfc8';
  else col=SEASON==='winter'?(v<0.5?'#e9eff3':'#e1e9ee'):SEASON==='autumn'?(v<0.5?'#a5c064':'#9db95e'):SEASON==='spring'?(v<0.5?'#8fd16e':'#87cb67'):(v<0.5?'#86c56a':'#80bf64');
- ctx.fillStyle=col;diamond(ctx,cx,cy,TW/2+0.6,TH/2+0.6);ctx.fill(); if(c.t==='rock'){ctx.fillStyle='#858279';ctx.beginPath();ctx.moveTo(cx-10+v*8,cy+3);ctx.lineTo(cx-3+v*8,cy-9-v*6);ctx.lineTo(cx+4+v*8,cy+3);ctx.fill();ctx.fillStyle='#b8b5ad';ctx.beginPath();ctx.moveTo(cx-3+v*8,cy-9-v*6);ctx.lineTo(cx+4+v*8,cy+3);ctx.lineTo(cx+v*8,cy+3);ctx.fill();
+ ctx.fillStyle=col;diamond(ctx,cx,cy,TW/2+0.6,TH/2+0.6);ctx.fill();if(c.bridge)bridgeDeck(ctx,c,x,y,cx,cy); if(c.t==='rock'||tun){ctx.fillStyle='#858279';ctx.beginPath();ctx.moveTo(cx-10+v*8,cy+3);ctx.lineTo(cx-3+v*8,cy-9-v*6);ctx.lineTo(cx+4+v*8,cy+3);ctx.fill();ctx.fillStyle='#b8b5ad';ctx.beginPath();ctx.moveTo(cx-3+v*8,cy-9-v*6);ctx.lineTo(cx+4+v*8,cy+3);ctx.lineTo(cx+v*8,cy+3);ctx.fill();
   if(v>0.6){ctx.fillStyle='#8f8c84';ctx.beginPath();ctx.moveTo(cx+4,cy+6);ctx.lineTo(cx+10,cy-3);ctx.lineTo(cx+15,cy+6);ctx.fill();}}
  if(c.t==='water'&&v<0.025){const ph=t/5000+v*400,bx=cx+Math.cos(ph)*10,by=cy+Math.sin(ph)*4.5,dir=Math.sin(ph)>0?-1:1;   // Boot
   ctx.fillStyle='#8a5a33';ctx.beginPath();ctx.moveTo(bx-7*dir,by);ctx.lineTo(bx+7*dir,by);ctx.lineTo(bx+5*dir,by+3);ctx.lineTo(bx-5*dir,by+3);ctx.fill();
@@ -445,21 +465,22 @@ export function draw(ctx,g,cam,{w,h,dpr,sel,preview,t,showNeeds,money,dirt,traff
  // spin: Karte wird gerade mit zwei Fingern gedreht (Winkel a um den Punkt px, py zwischen den Fingern)
  const sa=spin?.a||0,co=Math.cos(sa),si=Math.sin(sa),px=spin?.px||0,py=spin?.py||0;
  ctx.setTransform(dpr*co*cam.z,dpr*si*cam.z,-dpr*si*cam.z,dpr*co*cam.z,dpr*(co*(cam.x-px)-si*(cam.y-py)+px),dpr*(si*(cam.x-px)+co*(cam.y-py)+py));
- const pad=sa?Math.max(w,h)*0.6:200;ctx0=ctx;NET=railNet(g);CARS=trainCars(g,NET,t);const cells=[];
+ const pad=sa?Math.max(w,h)*0.6:200;ctx0=ctx;G=g;GHOST=!!ghost;NET=railNet(g);CARS=trainCars(g,NET,t);const cells=[];
  for(let d=0;d<MAP_W+MAP_H-1;d++)for(let u=Math.max(0,d-MAP_H+1);u<=Math.min(d,MAP_W-1);u++){const q=wpt(u+0.5,d-u+0.5),x=Math.floor(q[0]),y=Math.floor(q[1]),p=cellTop(x+0.5,y+0.5),cx=p.x,cy=p.y;
   const sx=cx*cam.z+cam.x,sy=cy*cam.z+cam.y;if(sx<-pad||sx>w+pad||sy<-pad||sy>h+pad*2)continue;if(area&&(x<area[0]||y<area[1]||x>area[2]||y>area[3]))continue;cells.push([x,y,cx,cy]);}
  // 1. Durchgang: flacher Boden (Gras, Straßen, Gleise, Markierungen) – so verdeckt nichts Flaches einen Zug oder ein Haus
  for(const[x,y,cx,cy]of cells){const c=g.tiles[y*MAP_W+x],mine=owns(g,x,y);ground(ctx,c,x,y,cx,cy,t);
   if(c.t==='road'&&traffic){const j=V.jam[y*MAP_W+x];ctx.fillStyle=j>1?'rgba(220,40,30,.55)':j>0.7?'rgba(240,170,30,.5)':'rgba(60,170,60,.35)';diamond(ctx,cx,cy,TW/2,TH/2);ctx.fill();}
-  if(isRail(c))railTile(ctx,g,x,y,c);
+  if(isRail(c)&&!(isTunnel(c)&&!ghost))railTile(ctx,g,x,y,c);
   if(!mine){ctx.fillStyle=land&&canBuy(g,Math.floor(x/SECTOR),Math.floor(y/SECTOR))?'rgba(255,230,120,.28)':'rgba(20,30,20,.32)';diamond(ctx,cx,cy,TW/2+0.6,TH/2+0.6);ctx.fill();}
   if(dirt&&covered(g,x,y,'dirt')){ctx.fillStyle='rgba(120,80,40,.38)';diamond(ctx,cx,cy,TW/2,TH/2);ctx.fill();}
   if(preview&&x>=preview.x&&y>=preview.y&&x<preview.x+(preview.n||1)&&y<preview.y+(preview.n||1)){ctx.fillStyle=preview.ok?'rgba(255,255,255,.35)':'rgba(220,60,40,.35)';diamond(ctx,cx,cy,TW/2,TH/2);ctx.fill();}
   if(sel&&sel.x===x&&sel.y===y){ctx.strokeStyle='#ffd23f';ctx.lineWidth=2.5;diamond(ctx,cx,cy,TW/2-1,TH/2-1);ctx.stroke();}}
  // 2. Durchgang: von hinten nach vorne Ampeln, Autos, Züge und Gebäude
  for(const[x,y,cx,cy]of cells){const c=g.tiles[y*MAP_W+x];
-  if(c.t==='road')roadMarks(ctx,g,x,y,cx,cy,c,t,cam.z>0.55?Math.min(1.5,V.jam[y*MAP_W+x]):0);
-  drawCars(ctx,CARS.cell.get(y*MAP_W+x));
+  const inTunnel=isTunnel(c)&&!ghost;   // im Tunnel sieht man keine Autos und Züge, nur die Portale
+  if(c.t==='road'&&!inTunnel)roadMarks(ctx,g,x,y,cx,cy,c,t,cam.z>0.55?Math.min(1.5,V.jam[y*MAP_W+x]):0);
+  if(inTunnel)portals(ctx,g,x,y,c);else drawCars(ctx,CARS.cell.get(y*MAP_W+x));
   // Beim Straßenbau sind Gebäude durchsichtig, damit man die Straßen dahinter sieht
   const see=ghost&&c.t!=='tree'&&c.t!=='road'&&c.t!=='rail';if(see)ctx.globalAlpha=0.28;building(ctx,c,x,y,cx,cy,t);if(see)ctx.globalAlpha=1;if(NIGHT>0.05)vis.push([c,x,y,cx,cy]);
   if(showNeeds&&HEIGHT[c.t]){const top=cy-HEIGHT[c.t][c.lvl]-6;
@@ -470,7 +491,7 @@ export function draw(ctx,g,cam,{w,h,dpr,sel,preview,t,showNeeds,money,dirt,traff
   if(env?.weather==='cloud'||env?.weather==='rain'){ctx.fillStyle=`rgba(90,100,115,${env.weather==='rain'?0.22:0.12})`;ctx.fillRect(0,0,w,h);}
   if(env?.dusk&&NIGHT<0.9){ctx.fillStyle=`rgba(255,130,60,${0.14*(1-Math.abs(NIGHT-0.5)*2)})`;ctx.fillRect(0,0,w,h);}
   if(NIGHT>0.05){ctx.fillStyle=`rgba(12,20,60,${0.58*NIGHT})`;ctx.fillRect(0,0,w,h);}ctx.restore();}
- if(NIGHT>0.3){LIGHTS=true;ctx.globalAlpha=0;for(const[c,x,y,cx,cy]of vis){if(c.t==='road')roadMarks(ctx,g,x,y,cx,cy,c,t,cam.z>0.55?Math.min(1.5,V.jam[y*MAP_W+x]):0);drawCars(ctx,CARS.cell.get(y*MAP_W+x));if(c.t!=='road')building(ctx,c,x,y,cx,cy,t);}
+ if(NIGHT>0.3){LIGHTS=true;ctx.globalAlpha=0;for(const[c,x,y,cx,cy]of vis){if(isTunnel(c))continue;if(c.t==='road')roadMarks(ctx,g,x,y,cx,cy,c,t,cam.z>0.55?Math.min(1.5,V.jam[y*MAP_W+x]):0);drawCars(ctx,CARS.cell.get(y*MAP_W+x));if(c.t!=='road')building(ctx,c,x,y,cx,cy,t);}
   ctx.globalAlpha=1;LIGHTS=false;}
  // Wetter: Regen und Schnee (in Bildschirm-Koordinaten)
  if(env?.weather==='rain'||env?.weather==='snow'){ctx.save();ctx.setTransform(dpr,0,0,dpr,0,0);const snow=env.weather==='snow',n=snow?110:160;

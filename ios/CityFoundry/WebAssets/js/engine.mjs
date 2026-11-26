@@ -1,7 +1,7 @@
 // My City Foundry – Spiellogik. Reine Funktionen: act(game, action, now) → {game, error, message}.
 import {VERSION,MAP_W,MAP_H,OLD_MAPS,SECTOR,SECTORS,START_SECTORS,LAND_LEVEL,landPrice,START_MONEY,OFFLINE_MAX_H,TOOLS,tool,ZONES,TREE_CLEAR,LEVELS,MAX_LEVEL,BIZ,bizMax,TAX_PER_PERSON,MOVE_IN_SEC,
  MAX_CITY_LEVEL,levelPop,LEVEL_BONUS,WORKER_SHARE,FREE_WORKERS,SHOP_SHARE,FACTORY_SHARE,ATTR_MOVE,TAX_DEFAULT,TAX_MIN,TAX_MAX,FACTORY_DIRT,HAPPY_MIN,
- ROAD_LANES,ROCK_ROAD,TRAFFIC_PER_PERSON,TRAFFIC_PER_JOB,TASKS_ACTIVE,EVENT_MIN,EVENTS,
+ ROAD_LANES,ROCK_ROAD,BRIDGE,TRAFFIC_PER_PERSON,TRAFFIC_PER_JOB,TASKS_ACTIVE,EVENT_MIN,EVENTS,
  FEATURES,GOLDVEIN_BONUS,GOODS,FACTORY_GOODS,LOCAL_PRICE,TRADE_PRICE,WANTED_BONUS,WANTED_MIN,NEIGHBORS} from './data.mjs';
 
 const MIN=6e4,H=36e5;
@@ -228,7 +228,7 @@ const A={
   if(id==='land')return A.buyLand(g,{sx:Math.floor(x/SECTOR),sy:Math.floor(y/SECTOR)},now);
   if(id==='bulldoze'){if(c.t==='grass'||c.t==='water'||c.t==='rock')throw new Error('Hier gibt es nichts abzureißen.');if(!owns(g,x,y))throw new Error('Dieses Gebiet gehört dir noch nicht.');
    if(c.t==='house'&&countHouses(g)<=1)throw new Error('Das letzte Haus bleibt stehen.');pay(g,c.t==='tree'?TREE_CLEAR:T.cost,'Abreißen');
-   const back=o=>o.rock||tool(o.t)?.onRock?{t:'rock'}:{t:'grass'};
+   const back=o=>o.bridge?{t:'water'}:o.rock||tool(o.t)?.onRock?{t:'rock'}:{t:'grass'};   // Brücke weg → wieder Wasser
    if(c.rx!==undefined){const s=tool(c.t).size||1;for(let j=c.ry;j<c.ry+s;j++)for(let i=c.rx;i<c.rx+s;i++)g.tiles[idx(i,j)]=back(c);}else g.tiles[idx(x,y)]=back(c);
    touch(g);stat(g,'bulldoze');return null;}
   if(id==='lanes'){if(c.t!=='road')throw new Error('Tippe auf eine Straße, um sie auszubauen.');const n=lanes(c)+1;if(n>=ROAD_LANES.length)throw new Error('Mehr Spuren gehen nicht – das ist schon eine Stadtautobahn.');
@@ -236,13 +236,15 @@ const A={
    const L=ROAD_LANES[n];if(cityLevel(g)<L.lvl)throw new Error(`${L.name} gibt es ab Stadt-Level ${L.lvl}.`);pay(g,L.cost,L.name);own(g,x,y).lanes=n;touch(g);stat(g,'lanes');return null;}
   if(c.t===id&&!T.size)return null;                       // schon da – beim Ziehen einfach überspringen
   // Schiene: wie eine Straße verlegen; über einer einspurigen Straße wird ein Bahnübergang daraus
-  if(id==='rail'){if(!owns(g,x,y))throw new Error('Dieses Gebiet gehört dir noch nicht. Kaufe es mit „Land“.');if(c.t==='water')throw new Error('Auf Wasser kann man nicht bauen.');
+  if(id==='rail'){if(!owns(g,x,y))throw new Error('Dieses Gebiet gehört dir noch nicht. Kaufe es mit „Land“.');
+   if(c.t==='water'){pay(g,T.cost*BRIDGE,'Eine Eisenbahnbrücke');g.tiles[idx(x,y)]={t:'rail',bridge:true};touch(g);stat(g,'rail');stat(g,'bridge');return null;}
    if(c.t==='road'){if(c.rail)return null;if(lanes(c)>1)throw new Error('Ein Bahnübergang geht nur über eine einspurige Straße.');pay(g,T.cost,'Ein Bahnübergang');own(g,x,y).rail=true;touch(g);stat(g,'rail');return null;}
    if(!['grass','tree','rock'].includes(c.t))throw new Error('Hier steht schon etwas. Erst abreißen.');pay(g,T.cost*(c.t==='rock'?ROCK_ROAD:1)+(c.t==='tree'?TREE_CLEAR:0),T.name);
    g.tiles[idx(x,y)]=c.t==='rock'?{t:'rail',rock:true}:{t:'rail'};touch(g);stat(g,'rail');return null;}
   if(id==='road'&&c.t==='rail'){if(!owns(g,x,y))throw new Error('Dieses Gebiet gehört dir noch nicht.');pay(g,T.cost,'Ein Bahnübergang');
-   g.tiles[idx(x,y)]=c.rock?{t:'road',lanes:1,rail:true,rock:true}:{t:'road',lanes:1,rail:true};touch(g);stat(g,'road');update(g,now);return null;}
-  if(id==='road'){if(!owns(g,x,y))throw new Error('Dieses Gebiet gehört dir noch nicht. Kaufe es mit „Land“.');if(c.t==='water')throw new Error('Auf Wasser kann man nicht bauen.');
+   g.tiles[idx(x,y)]={t:'road',lanes:1,rail:true,...(c.rock?{rock:true}:{}),...(c.bridge?{bridge:true}:{})};touch(g);stat(g,'road');update(g,now);return null;}
+  if(id==='road'){if(!owns(g,x,y))throw new Error('Dieses Gebiet gehört dir noch nicht. Kaufe es mit „Land“.');
+   if(c.t==='water'){pay(g,T.cost*BRIDGE,'Eine Brücke');g.tiles[idx(x,y)]={t:'road',lanes:1,bridge:true};touch(g);stat(g,'road');stat(g,'bridge');update(g,now);return null;}
    if(!['grass','tree','rock'].includes(c.t))throw new Error('Hier steht schon etwas. Erst abreißen.');pay(g,T.cost*(c.t==='rock'?ROCK_ROAD:1)+(c.t==='tree'?TREE_CLEAR:0),T.name);
    g.tiles[idx(x,y)]=c.t==='rock'?{t:'road',lanes:1,rock:true}:{t:'road',lanes:1};touch(g);stat(g,'road');update(g,now);return null;}
   if(T.once&&built(g,id))throw new Error(`${T.name} gibt es nur einmal in der Stadt.`);

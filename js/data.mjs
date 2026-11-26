@@ -1,7 +1,7 @@
 // My City Foundry – Spieldaten. Stadtaufbau ab etwa 10 Jahren.
 export const VERSION=1;
 export const SAVE_KEY='my-city-foundry-v1';   // nie ändern – sonst ist der Spielstand weg
-export const BUILD='0.11.2';                    // muss zu package.json und version.json passen (Update-Prüfung in der App)
+export const BUILD='0.12.0';                    // muss zu package.json und version.json passen (Update-Prüfung in der App)
 export const MAP_W=128,MAP_H=128;             // ganze Welt
 export const OLD_MAPS=[40,64];                 // ältere Städte (0.1/0.2: 40×40, 0.3/0.4: 64×64) ziehen in die Mitte der Welt
 // ---------- Gebiete: Welt in 8×8 Gebiete zu je 16×16 Feldern; die Mitte (4×4 Gebiete = 64×64) gehört dir von Anfang an ----------
@@ -33,8 +33,8 @@ export const GROUPS=[
  {id:'bulldoze',name:'Abriss',icon:'🚜'}];
 export const TOOLS=[
  {id:'hand',group:'hand',name:'Ansehen',icon:'✋',lvl:1},
- {id:'road',group:'road',name:'Straße',icon:'🛣️',cost:10,lvl:1,text:'Tippen oder ziehen. Auf Fels kostet sie das Dreifache.'},
- {id:'rail',group:'road',name:'Schiene',icon:'🚆',cost:40,lvl:16,text:'Tippen oder ziehen. Verbinde Bahnhöfe – die Züge fahren von Bahnhof zu Bahnhof. Gleise kommen an den Enden des Bahnhofs an. Über eine einspurige Straße entsteht ein Bahnübergang.'},
+ {id:'road',group:'road',name:'Straße',icon:'🛣️',cost:10,lvl:1,text:'Tippen oder ziehen. Über Wasser wird eine Brücke daraus (5-facher Preis), durch Berge ein Tunnel (3-facher Preis).'},
+ {id:'rail',group:'road',name:'Schiene',icon:'🚆',cost:40,lvl:16,text:'Tippen oder ziehen. Verbinde Bahnhöfe – die Züge fahren von Bahnhof zu Bahnhof. Gleise kommen an den Enden des Bahnhofs an. Über einer einspurigen Straße entsteht ein Bahnübergang, über Wasser eine Brücke (5-facher Preis), durch Berge ein Tunnel (3-facher Preis).'},
  {id:'lanes',group:'road',name:'Straße ausbauen',icon:'🛤️',lvl:6,text:'Mehr Spuren für mehr Verkehr: tippe oder ziehe über eine Straße.'},
  {id:'land',group:'mine',name:'Land kaufen',icon:'🗺️',lvl:12,text:'Kaufe Gebiete neben deiner Stadt – für Dörfer, Bergbau und mehr Platz.'},
  {id:'bulldoze',group:'bulldoze',name:'Abreißen',icon:'🚜',cost:5,lvl:1},
@@ -98,7 +98,8 @@ export const TOOLS=[
  {id:'ore',group:'mine',name:'Erzmine',icon:'⚒️',cost:40000,upkeep:15,size:2,lvl:38,jobs:500,prod:700,good:'ore',dirt:3,onRock:true},
  {id:'gold',group:'mine',name:'Goldmine',icon:'💰',cost:150000,upkeep:30,size:2,lvl:58,jobs:900,prod:2600,good:'gold',dirt:2,onRock:true}];
 export const ROAD_LANES=[null,{name:'Straße',cap:60,cost:10},{name:'Zweispurige Straße',cap:160,cost:60,lvl:6},{name:'Dreispurige Straße',cap:400,cost:200,lvl:18},{name:'Stadtautobahn',cap:1000,cost:600,lvl:32}];
-export const ROCK_ROAD=3;                       // Straße auf Fels kostet das Dreifache
+export const ROCK_ROAD=3;                       // Straße auf Fels (Tunnel) kostet das Dreifache
+export const BRIDGE=5;                          // Straße oder Schiene über Wasser (Brücke) kostet das Fünffache
 export const TRAFFIC_PER_PERSON=0.35,TRAFFIC_PER_JOB=0.25;   // Verkehr, den Einwohner und Arbeitsplätze erzeugen
 export const tool=id=>TOOLS.find(t=>t.id===id);
 export const ZONES={zone:'house',zonec:'shop',zonei:'factory'};

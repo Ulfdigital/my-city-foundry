@@ -12,9 +12,9 @@ test('Neue Stadt: eigener Name, Startgeld, Straße und ein Haus',()=>{
  assert.equal(g.tiles.length,MAP_W*MAP_H);assert.equal(population(g),LEVELS[1].people);const s=g.start;assert.equal(tile(g,s.x,s.y).t,'road');assert.equal(tile(g,s.x,s.y+1).t,'house');
  assert.ok(g.tiles.some(c=>c.t==='water'));assert.ok(g.tiles.some(c=>c.t==='tree'));});
 
-test('Bauen: Straße kostet Geld, nicht auf Wasser, nicht doppelt, Abreißen',()=>{
+test('Bauen: Straße kostet Geld, Häuser nicht auf Wasser, nicht doppelt, Abreißen',()=>{
  let g=newGame(T0);const p=free(g);const m=g.money;g=ok(g,{type:'build',tool:'road',x:p.x,y:p.y});assert.equal(m-g.money,tool('road').cost);
- const w=g.tiles.findIndex((c,i)=>c.t==='water'&&owns(g,i%MAP_W,Math.floor(i/MAP_W)));assert.match(bad(g,{type:'build',tool:'road',x:w%MAP_W,y:Math.floor(w/MAP_W)}),/Wasser/);
+ const w=g.tiles.findIndex((c,i)=>c.t==='water'&&owns(g,i%MAP_W,Math.floor(i/MAP_W)));assert.match(bad(g,{type:'build',tool:'park',x:w%MAP_W,y:Math.floor(w/MAP_W)}),/Wasser/);
  assert.match(bad(g,{type:'build',tool:'park',x:p.x,y:p.y}),/abreißen/);g=ok(g,{type:'build',tool:'bulldoze',x:p.x,y:p.y});assert.equal(tile(g,p.x,p.y).t,'grass');
  g.money=1;assert.match(bad(g,{type:'build',tool:'park',x:p.x,y:p.y}),/Geld/);});
 
@@ -202,3 +202,23 @@ test('Drehen mit zwei Fingern: die Stelle zwischen den Fingern bleibt, wo sie is
  const cam={x:-1234,y:-567,z:1.7};R.setRotation(0);const sx=310,sy=455,p=R.screenToPoint(cam,sx,sy);
  for(const k of[1,1,-1,2,1]){R.setRotation(R.getRotation()+k);R.pinTo(cam,p,sx,sy);const q=R.screenToPoint(cam,sx,sy);assert.ok(Math.abs(q[0]-p[0])<1e-6&&Math.abs(q[1]-p[1])<1e-6,`Drehung ${R.getRotation()}`);}
  R.setRotation(0);});
+
+test('Brücken über Wasser und Tunnel durch Berge – für Straße und Schiene',async()=>{const {railNet}=await import('../js/render.mjs');const {BRIDGE,ROCK_ROAD}=await import('../js/data.mjs');
+ let g=newGame(T0);g.level=20;g.money=1e6;const s=g.start,X=s.x-14,Y=s.y+5;
+ for(let y=Y-1;y<Y+4;y++)for(let x=X-1;x<X+16;x++)g.tiles[y*MAP_W+x]={t:'grass'};
+ for(let y=Y-1;y<Y+4;y++)for(const x of[X+5,X+6])g.tiles[y*MAP_W+x]={t:'water'};       // Fluss
+ for(let y=Y-1;y<Y+4;y++)for(const x of[X+10,X+11])g.tiles[y*MAP_W+x]={t:'rock'};     // Berg
+ g.rev++;
+ // Straße: Brücke und Tunnel
+ g=ok(g,{type:'build',tool:'road',x:X+5,y:Y+2});assert.deepEqual(tile(g,X+5,Y+2),{t:'road',lanes:1,bridge:true});
+ let m=g.money;g=ok(g,{type:'build',tool:'rail',x:X+6,y:Y+3});assert.equal(m-g.money,tool('rail').cost*BRIDGE,'Eisenbahnbrücke kostet das Fünffache');
+ m=g.money;g=ok(g,{type:'build',tool:'rail',x:X+11,y:Y+3});assert.equal(m-g.money,tool('rail').cost*ROCK_ROAD,'Tunnel kostet das Dreifache');
+ g=ok(g,{type:'build',tool:'road',x:X+10,y:Y+2});assert.ok(tile(g,X+10,Y+2).rock);
+ g=ok(g,{type:'build',tool:'bulldoze',x:X+5,y:Y+2});assert.equal(tile(g,X+5,Y+2).t,'water','Brücke abreißen → wieder Wasser');
+ g=ok(g,{type:'build',tool:'bulldoze',x:X+10,y:Y+2});assert.equal(tile(g,X+10,Y+2).t,'rock','Tunnel abreißen → wieder Berg');
+ // Schiene von Bahnhof zu Bahnhof: über den Fluss und durch den Berg
+ g=ok(g,{type:'build',tool:'train',x:X,y:Y});for(let x=X+2;x<X+14;x++)g=ok(g,{type:'build',tool:'rail',x,y:Y});g=ok(g,{type:'build',tool:'train',x:X+14,y:Y});
+ assert.ok(tile(g,X+5,Y).bridge&&tile(g,X+6,Y).bridge);assert.ok(tile(g,X+10,Y).rock&&tile(g,X+11,Y).rock);
+ const net=railNet(g);assert.equal(net.tours.length,1);assert.equal(net.tours[0].legs.length,2,'Zug fährt über Brücke und durch Tunnel zum anderen Bahnhof');
+ // Straße quert die Eisenbahnbrücke: Bahnübergang bleibt Brücke
+ g=ok(g,{type:'build',tool:'road',x:X+5,y:Y});assert.ok(tile(g,X+5,Y).bridge&&tile(g,X+5,Y).rail);});
