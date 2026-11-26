@@ -1,12 +1,12 @@
 // My City Foundry – Spieldaten. Stadtaufbau ab etwa 10 Jahren.
 export const VERSION=1;
 export const SAVE_KEY='my-city-foundry-v1';   // nie ändern – sonst ist der Spielstand weg
-export const BUILD='0.12.2';                    // muss zu package.json und version.json passen (Update-Prüfung in der App)
-export const MAP_W=128,MAP_H=128;             // ganze Welt
-export const OLD_MAPS=[40,64];                 // ältere Städte (0.1/0.2: 40×40, 0.3/0.4: 64×64) ziehen in die Mitte der Welt
-// ---------- Gebiete: Welt in 8×8 Gebiete zu je 16×16 Feldern; die Mitte (4×4 Gebiete = 64×64) gehört dir von Anfang an ----------
+export const BUILD='0.13.0';                    // muss zu package.json und version.json passen (Update-Prüfung in der App)
+export const MAP_W=192,MAP_H=192;             // ganze Welt (bis 0.12: 128×128 – wird beim Laden um einen Ring Gebiete erweitert)
+export const OLD_MAPS=[40,64,128];             // ältere Städte (0.1/0.2: 40×40, 0.3/0.4: 64×64, 0.5–0.12: 128×128) ziehen in die Mitte der Welt
+// ---------- Gebiete: Welt in 12×12 Gebiete zu je 16×16 Feldern; die Mitte (4×4 Gebiete = 64×64) gehört dir von Anfang an ----------
 export const SECTOR=16,SECTORS=MAP_W/SECTOR;
-export const START_SECTORS=[2,5];               // von Gebiet 2 bis 5 (in x und y) gehört dir alles
+export const START_SECTORS=[4,7];               // von Gebiet 4 bis 7 (in x und y) gehört dir alles
 export const LAND_LEVEL=12;                     // ab diesem Stadt-Level kann man Land kaufen
 export const FAR_LAND=1.5;                     // Gebiete, die nicht an dein Land grenzen, kosten 50 % mehr
 export const landPrice=bought=>Math.round(15000*Math.pow(1.3,bought)/500)*500;
