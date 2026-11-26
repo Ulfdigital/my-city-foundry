@@ -1,5 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {newGame,act,update,restore,tile,population,incomePerMin,missing,canUpgrade,hasRoad,demand,cityLevel,jobs,unlocked,attractiveness,tourism,covered,built,owns,canBuy,sectorPrice,jam,jammed,taskProgress,taskDone,info} from '../js/engine.mjs';
+import {ownOil} from '../js/engine.mjs';
 import {START_MONEY,SAVE_KEY,MAP_W,MAP_H,tool,TOOLS,LEVELS,MOVE_IN_SEC,levelPop,LEVEL_BONUS,BUILD,BIZ,MAX_CITY_LEVEL,OLD_MAPS,SECTOR,SECTORS,ROAD_LANES,LAND_LEVEL} from '../js/data.mjs';
 import {readFileSync} from 'node:fs';
 const T0=new Date('2026-11-24T10:00:00').getTime(),MIN=6e4;
@@ -235,3 +236,12 @@ test('Brücken über Wasser und Tunnel durch Berge – für Straße und Schiene'
  const net=railNet(g);assert.equal(net.tours.length,1);assert.equal(net.tours[0].legs.length,2,'Zug fährt über Brücke und durch Tunnel zum anderen Bahnhof');
  // Straße quert die Eisenbahnbrücke: Bahnübergang bleibt Brücke
  g=ok(g,{type:'build',tool:'road',x:X+5,y:Y});assert.ok(tile(g,X+5,Y).bridge&&tile(g,X+5,Y).rail);});
+
+test('Öl im eigenen Land (0.14): neue und alte Städte haben ein Ölfeld',()=>{
+ for(const seed of[1,7,42,99,1234,5555])assert.ok(ownOil(newGame(T0,{},seed)),'neue Stadt hat Öl, Seed '+seed);
+ const g=newGame(T0,{},42);g.secrets=g.secrets.map((v,i)=>g.land[i]&&v==='oil'?null:v);assert.ok(!ownOil(g));
+ const r=restore(JSON.stringify(g));assert.ok(ownOil(r));assert.equal(r.oilGift,true);
+ const i=r.land.findIndex((v,j)=>v===1&&r.secrets[j]==='oil'),sx=i%SECTORS,sy=Math.floor(i/SECTORS);let o=null;
+ for(let y=sy*SECTOR;y<sy*SECTOR+SECTOR&&!o;y++)for(let x=sx*SECTOR;x<sx*SECTOR+SECTOR;x++)if(['grass','tree','rock'].includes(tile(r,x,y).t)){o={x,y};break;}
+ r.level=30;r.money=1e8;const a=act(r,{type:'build',tool:'oil',...o},T0);assert.ok(!a.error,a.error);
+ const again=restore(JSON.stringify(a.game));assert.ok(!again.oilGift||a.game.oilGift);});

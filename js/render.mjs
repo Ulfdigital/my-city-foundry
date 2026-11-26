@@ -80,6 +80,11 @@ function portals(ctx,g,x,y,c){for(const[dx,dy]of DIRS){const n=tile(g,x+dx,y+dy)
   if(c.t==='road'?n.t!=='road':!linked(g,x,y,dx,dy))continue;
   const E=[x+0.5+dx*0.5,y+0.5+dy*0.5],e=[-dy,dx],arch=(w,h)=>{const ps=[];for(let i=0;i<=12;i++){const a=Math.PI*i/12;ps.push(W([E[0]+e[0]*w*Math.cos(a),E[1]+e[1]*w*Math.cos(a)],h*Math.sin(a)+(i===0||i===12?0:h*0.25)));}return ps;};
   fillPoly(ctx,arch(0.4,15),'#7b776e');fillPoly(ctx,arch(0.29,11),'#1d1c1a');}}
+// Ölpfütze auf Gras in Gebieten mit Öl – so sieht man schon von Weitem, wo Öl im Boden ist
+function oilSpot(ctx,x,y,cx,cy,t){const v=hash(x+311,y+977);if(v>0.16)return;const w=v*0.5+0.12,ox=(hash(x,y+5)-0.5)*10,oy=(hash(x+5,y)-0.5)*5;
+ ctx.fillStyle='#1d1b1f';ctx.beginPath();ctx.ellipse(cx+ox,cy+oy,TW*w,TH*w,0,0,7);ctx.fill();
+ ctx.fillStyle='rgba(120,90,200,.35)';ctx.beginPath();ctx.ellipse(cx+ox-TW*w*0.3,cy+oy-TH*w*0.25,TW*w*0.35,TH*w*0.25,0,0,7);ctx.fill();
+ if(v<0.05){const s=(Math.sin(t/300+x)+1)/2;ctx.fillStyle=`rgba(255,255,255,${0.25+0.35*s})`;ctx.beginPath();ctx.arc(cx+ox+TW*w*0.2,cy+oy-TH*w*0.2,1.4,0,7);ctx.fill();}}
 function ground(ctx,c,x,y,cx,cy,t){
  const v=hash(x,y),tun=isTunnel(c)&&!GHOST;let col;
  // Bodenfarbe: jede Art genau einmal festlegen (Straße grau, Wasser blau, Fels grau, Zonen farbig, sonst Gras je Jahreszeit)
@@ -469,7 +474,7 @@ export function draw(ctx,g,cam,{w,h,dpr,sel,preview,t,showNeeds,money,dirt,traff
  for(let d=0;d<MAP_W+MAP_H-1;d++)for(let u=Math.max(0,d-MAP_H+1);u<=Math.min(d,MAP_W-1);u++){const q=wpt(u+0.5,d-u+0.5),x=Math.floor(q[0]),y=Math.floor(q[1]),p=cellTop(x+0.5,y+0.5),cx=p.x,cy=p.y;
   const sx=cx*cam.z+cam.x,sy=cy*cam.z+cam.y;if(sx<-pad||sx>w+pad||sy<-pad||sy>h+pad*2)continue;if(area&&(x<area[0]||y<area[1]||x>area[2]||y>area[3]))continue;cells.push([x,y,cx,cy]);}
  // 1. Durchgang: flacher Boden (Gras, Straßen, Gleise, Markierungen) – so verdeckt nichts Flaches einen Zug oder ein Haus
- for(const[x,y,cx,cy]of cells){const c=g.tiles[y*MAP_W+x],mine=owns(g,x,y);ground(ctx,c,x,y,cx,cy,t);
+ for(const[x,y,cx,cy]of cells){const c=g.tiles[y*MAP_W+x],mine=owns(g,x,y);ground(ctx,c,x,y,cx,cy,t);if(c.t==='grass'&&g.secrets?.[Math.floor(y/SECTOR)*SECTORS+Math.floor(x/SECTOR)]==='oil')oilSpot(ctx,x,y,cx,cy,t);
   if(c.t==='road'&&traffic){const j=V.jam[y*MAP_W+x];ctx.fillStyle=j>1?'rgba(220,40,30,.55)':j>0.7?'rgba(240,170,30,.5)':'rgba(60,170,60,.35)';diamond(ctx,cx,cy,TW/2,TH/2);ctx.fill();}
   if(isRail(c)&&!(isTunnel(c)&&!ghost))railTile(ctx,g,x,y,c);
   if(!mine){ctx.fillStyle=land&&canBuy(g,Math.floor(x/SECTOR),Math.floor(y/SECTOR))?'rgba(255,230,120,.28)':'rgba(20,30,20,.32)';diamond(ctx,cx,cy,TW/2+0.6,TH/2+0.6);ctx.fill();}
@@ -511,6 +516,10 @@ export function draw(ctx,g,cam,{w,h,dpr,sel,preview,t,showNeeds,money,dirt,traff
  if(land){for(let sy=0;sy<SECTORS;sy++)for(let sx=0;sx<SECTORS;sx++){const p=cellTop(sx*SECTOR+SECTOR/2,sy*SECTOR+SECTOR/2),f=features(g,sx,sy),buy=canBuy(g,sx,sy);
    if(f.length)tag(p,f.map(q=>FEATURES[q].icon).join(' '),20*k,-16*k,'#000','rgba(255,255,255,.85)');
    if(buy)tag(p,'🗺️ '+sectorPrice(g,sx,sy).toLocaleString('de-DE'),13*k,14*k,'#245a91','rgba(255,255,255,.95)');}}
+ // Ölfeld im eigenen Land: Schild, solange dort noch kein Ölbohrturm steht (auch ohne „Land“-Ansicht sichtbar)
+ if(!land&&g.secrets){const hasTower=new Set();for(let i=0;i<g.tiles.length;i++)if(g.tiles[i].t==='oil')hasTower.add(Math.floor(Math.floor(i/MAP_W)/SECTOR)*SECTORS+Math.floor((i%MAP_W)/SECTOR));
+  for(let i=0;i<g.secrets.length;i++)if(g.secrets[i]==='oil'&&g.land[i]===1&&!hasTower.has(i)){const sx=i%SECTORS,sy=Math.floor(i/SECTORS),p=cellTop(sx*SECTOR+SECTOR/2,sy*SECTOR+SECTOR/2),b=Math.sin(t/400)*3*k;
+   tag({x:p.x,y:p.y+b},'🛢️ Öl – hier Ölbohrturm bauen',15*k,-10*k,'#fff','rgba(30,30,34,.88)');}}
  // Nachbarstädte am Rand der Welt
  const W2=wanted(Date.now());for(const[i,nb]of NEIGHBORS.entries()){const pos=[[MAP_W/2,-4],[MAP_W+4,MAP_H/2],[MAP_W/2,MAP_H+4],[-4,MAP_H/2]][i],p=cellTop(pos[0],pos[1]);
   for(const[a,b,hh,col]of[[-30,6,40,'#cfd9e2'],[0,0,70,'#b9cad8'],[28,8,50,'#e3d6c4'],[-12,18,26,'#f2d0c4'],[16,22,30,'#d9ecd5']])box(ctx,p.x+a,p.y+b,12,6,hh,col);

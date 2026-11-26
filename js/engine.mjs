@@ -52,6 +52,14 @@ export function nextTo(g,sx,sy){return N4.some(([dx,dy])=>{const x=sx+dx,y=sy+dy
 export function sectorPrice(g,sx,sy){const p=landPrice(boughtLand(g));return sx===undefined||nextTo(g,sx,sy)?p:Math.round(p*FAR_LAND/500)*500;}
 // Versteckte Schätze je Gebiet (Öl, Goldader) – werden einmal ausgewürfelt, sind aber vor dem Kauf sichtbar
 function makeSecrets(g){const st=startLand();return Array.from({length:SECTORS*SECTORS},(_,i)=>{const r=rand(g);if(st[i])return r<0.08?'oil':null;return r<0.14?'oil':r<0.24?'goldvein':null;});}
+// Öl im eigenen Land (0.14): Wer nur Land ohne Öl hat, bekommt ein festes Ölfeld in einem eigenen Gebiet –
+// am liebsten eines ohne Goldader und mit viel freiem Platz für den Ölbohrturm
+export function ownOil(g){return g.land.some((v,i)=>v===1&&g.secrets?.[i]==='oil');}
+function ensureOwnOil(g){if(!Array.isArray(g.secrets)||ownOil(g))return false;let best=-1,bs=-1;
+ for(let i=0;i<g.land.length;i++){if(g.land[i]!==1)continue;const sx=i%SECTORS,sy=Math.floor(i/SECTORS);let free=0;
+  for(let y=sy*SECTOR;y<sy*SECTOR+SECTOR;y++)for(let x=sx*SECTOR;x<sx*SECTOR+SECTOR;x++)if(['grass','tree','rock'].includes(g.tiles[idx(x,y)]?.t))free++;
+  const score=free+(g.secrets[i]?-1000:0);if(score>bs){bs=score;best=i;}}
+ if(best<0)return false;g.secrets[best]='oil';touch(g);return true;}
 export function sectorOf(x,y){return Math.floor(y/SECTOR)*SECTORS+Math.floor(x/SECTOR);}
 export function features(g,sx,sy){const i=sy*SECTORS+sx,f=info(g).feat[i]||[];return g.secrets?.[i]?[...f,g.secrets[i]]:f;}
 export function hasFeature(g,x,y,f){return features(g,Math.floor(x/SECTOR),Math.floor(y/SECTOR)).includes(f);}
@@ -198,7 +206,7 @@ function events(g,now){if(!g.nextEvent){g.nextEvent=now+(EVENT_MIN[0]+rand(g)*(E
 // ---------- Spielstand ----------
 export function newGame(now=Date.now(),{cityName='Neustadt'}={},seed=Math.floor(now%2147483647)||1){
  const g={version:VERSION,tax:TAX_DEFAULT,level:1,levelUps:[],city:{name:String(cityName).trim().slice(0,30)||'Neustadt'},money:START_MONEY,seed:seed>>>0,tiles:null,start:null,land:startLand(),secrets:null,achv:{},crest:null,tasks:[],events:[],stats:{},rev:0,createdAt:now,lastAt:now,earned:0};
- makeMap(g);g.secrets=makeSecrets(g);refreshTasks(g);return update(g,now);}
+ makeMap(g);g.secrets=makeSecrets(g);ensureOwnOil(g);refreshTasks(g);return update(g,now);}
 export function update(g,now){const dt=Math.max(0,Math.min(now-(g.lastAt||now),OFFLINE_MAX_H*H));
  if(dt>0){const inc=incomePerMin(g)*dt/MIN;g.money=Math.round((g.money+inc)*100)/100;if(inc>0)g.earned=(g.earned||0)+inc;if(g.money<0)g.money=0;}
  // Grundstücke werden bebaut (Straße + Nachfrage, Fabriken brauchen Strom)
@@ -215,7 +223,7 @@ export function restore(raw){try{const g=typeof raw==='string'?JSON.parse(raw):r
  const old=OLD_MAPS.find(n=>g.tiles.length===n*n);if(old)migrate(g,old);else if(g.tiles.length!==MAP_W*MAP_H)return null;
  for(const c of g.tiles)if(c.t==='road'&&!c.lanes)c.lanes=1;
  g.stats=g.stats||{};g.level=g.level||1;g.levelUps=g.levelUps||[];g.rev=g.rev||0;if(g.tax===undefined)g.tax=TAX_DEFAULT;
- if(!Array.isArray(g.land)||g.land.length!==SECTORS*SECTORS)g.land=startLand();if(!Array.isArray(g.secrets))g.secrets=makeSecrets(g);if(!g.achv){g.achv={};achievements(g,Date.now());g.newAchv=[];}/* alte Städte: bereits Erreichtes still eintragen */g.events=g.events||[];refreshTasks(g);return g;}catch{return null;}}
+ if(!Array.isArray(g.land)||g.land.length!==SECTORS*SECTORS)g.land=startLand();if(!Array.isArray(g.secrets))g.secrets=makeSecrets(g);if(ensureOwnOil(g))g.oilGift=true;if(!g.achv){g.achv={};achievements(g,Date.now());g.newAchv=[];}/* alte Städte: bereits Erreichtes still eintragen */g.events=g.events||[];refreshTasks(g);return g;}catch{return null;}}
 const moveIn=g=>Math.round((MOVE_IN_SEC[0]+rand(g)*(MOVE_IN_SEC[1]-MOVE_IN_SEC[0]))*1000);
 function stat(g,k,n=1){g.stats[k]=(g.stats[k]||0)+n;}
 function pay(g,n,what){if(g.money<n)throw new Error(`Dafür fehlt Geld: ${what} kostet ${Math.ceil(n).toLocaleString('de-DE')} Taler.`);g.money=Math.round((g.money-n)*100)/100;}
