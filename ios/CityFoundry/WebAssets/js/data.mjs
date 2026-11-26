@@ -1,7 +1,7 @@
 // My City Foundry – Spieldaten. Stadtaufbau ab etwa 10 Jahren.
 export const VERSION=1;
 export const SAVE_KEY='my-city-foundry-v1';   // nie ändern – sonst ist der Spielstand weg
-export const BUILD='0.14.0';                    // muss zu package.json und version.json passen (Update-Prüfung in der App)
+export const BUILD='0.15.0';                    // muss zu package.json und version.json passen (Update-Prüfung in der App)
 export const MAP_W=192,MAP_H=192;             // ganze Welt (bis 0.12: 128×128 – wird beim Laden um einen Ring Gebiete erweitert)
 export const OLD_MAPS=[40,64,128];             // ältere Städte (0.1/0.2: 40×40, 0.3/0.4: 64×64, 0.5–0.12: 128×128) ziehen in die Mitte der Welt
 // ---------- Gebiete: Welt in 12×12 Gebiete zu je 16×16 Feldern; die Mitte (4×4 Gebiete = 64×64) gehört dir von Anfang an ----------
@@ -88,6 +88,7 @@ export const TOOLS=[
  {id:'beachhotel',group:'special',name:'Strandhotel',icon:'🏝️',cost:30000,upkeep:10,size:2,lvl:25,jobs:150,attr:15,tour:400,feature:'beach',nearWater:true},
  {id:'naturepark',group:'fun',name:'Naturpark',icon:'🦌',cost:8000,upkeep:3,radius:10,provides:'park',size:3,lvl:18,jobs:15,attr:18,tour:150,feature:'forest',keepTrees:true},
  {id:'cablecar',group:'fun',name:'Seilbahn',icon:'🚠',cost:20000,upkeep:6,lvl:22,jobs:30,attr:14,tour:250,feature:'mountain',onRock:true},
+ {id:'mountainhotel',group:'special',name:'Berghotel',icon:'🏔️',cost:25000,upkeep:8,size:2,lvl:24,jobs:120,attr:12,tour:300,feature:'mountain',onRock:true,text:'Hotel im Schnee auf dem Berg – zieht Wintergäste an.'},
  {id:'ski',group:'fun',name:'Skigebiet',icon:'⛷️',cost:70000,upkeep:20,size:3,lvl:35,jobs:250,attr:30,tour:900,feature:'mountain',onRock:true},
  {id:'oil',group:'mine',name:'Ölbohrturm',icon:'🛢️',cost:25000,upkeep:10,lvl:30,jobs:60,prod:500,good:'oil',dirt:3,feature:'oil',anyGround:true},
  // Handel: Anschlüsse zu den Nachbarstädten (cap = Waren pro Minute)
@@ -160,7 +161,7 @@ export const citySize=p=>[...CITY_SIZES].reverse().find(c=>p>=c.min);
 
 // ---------- Besondere Gebiete und Handel (0.7) ----------
 // Besonderheiten eines Gebiets (16×16): ergeben sich aus der Landschaft + versteckte Schätze (Öl, Goldader)
-export const FEATURES={beach:{icon:'🏖️',name:'Strand',text:'Strandbad und Strandhotel möglich'},mountain:{icon:'⛰️',name:'Berge',text:'Bergbau, Seilbahn und Skigebiet möglich'},
+export const FEATURES={beach:{icon:'🏖️',name:'Strand',text:'Strandbad und Strandhotel möglich'},mountain:{icon:'⛰️',name:'Berge',text:'Bergbau, Seilbahn, Skigebiet und Berghotel möglich'},
  forest:{icon:'🌲',name:'Wald',text:'Naturpark möglich'},oil:{icon:'🛢️',name:'Öl',text:'Ölbohrturm möglich'},goldvein:{icon:'💰',name:'Goldader',text:'Minen bringen hier das Doppelte'}};
 export const GOLDVEIN_BONUS=2;
 // Waren: Wert pro Einheit. Fabriken stellen „Waren“ her (pro Arbeitsplatz), Minen ihre Rohstoffe.
